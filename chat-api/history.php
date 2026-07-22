@@ -1,8 +1,15 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/common.php';
+require_once __DIR__ . '/../auth-api/session.php';
 
 handle_request(function (PDO $pdo) {
+  // Reading history requires the same verified login as sending — chat
+  // is fully gated behind an account now, not just posting to it.
+  $user = current_user($pdo);
+  if ($user === null) json_error('log in to chat', 401);
+  if (!$user['verified']) json_error('verify your email to unlock chat', 403);
+
   $afterId = (int)($_GET['after_id'] ?? 0);
   $limit   = (int)($_GET['limit'] ?? 30);
   if ($limit < 1) $limit = 1;

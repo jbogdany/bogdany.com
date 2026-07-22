@@ -137,20 +137,97 @@ you actually query it.
 
 ---
 
-# Site chat (separate feature, separate database)
+# Accounts (users, roles, sessions — same database as chat)
+
+The terminal no longer auto-logs in as "guest". On boot it prompts for a
+name; you can stay anonymous for that visit, or say yes when asked to
+**keep the name permanently**, which walks you through setting a
+password + email right there in the terminal. That creates a real
+account and emails a verification link — click it to unlock chat.
+
+```
+auth-api/
+  config.php                 points at chat-api/config.php — same DB, one place to edit
+  session.php                shared session/user helpers (also used by chat-api)
+  common.php                 shared DB connection + JSON helpers
+  register.php                POST — create an account, email a verification link
+  login.php                    POST — username + password → session cookie
+  logout.php                    POST — end the current session
+  me.php                          GET  — resolve the session cookie to a user (used on boot)
+  request-password-reset.php        POST — email a reset link (must be logged out)
+  reset-password.php                  POST — complete a reset with the emailed token
+  delete-account.php                    POST — soft-delete (flips a flag, keeps the row + chat history)
+  verify.php                              GET  — the page the emailed verification link opens
+```
+
+## Setup
+
+Accounts live in the **same `chats` database** as messages — don't
+create a separate database for this.
+
+1. Run the *whole* `chat-api/schema.sql` (see below) — it now creates
+   `roles`, `users`, `user_roles`, `sessions`, `email_verifications`,
+   and `password_resets`, in addition to `messages`. Already have a
+   `messages` table from before? See the upgrade note at the bottom of
+   that file.
+2. `auth-api/config.php` already points at `chat-api/config.php`, so
+   once that file has your credentials, both APIs work — nothing extra
+   to fill in.
+3. Upload `auth-api/` (including `.htaccess`) as a sibling of
+   `index.htm`, same as `chat-api/`.
+4. Verification and password-reset emails go out through PHP's built-in
+   `mail()` — no SMTP/PHPMailer setup needed, and it works out of the
+   box on GoDaddy shared hosting as long as the site is on a domain the
+   hosting account actually owns (mail's `From:` uses that domain).
+
+## Roles
+
+Three roles live in the `roles` table: `customer` (every new account,
+automatically), `customer_service`, and `administrator`. There's no
+admin UI for granting the latter two yet — that's a manual
+`INSERT INTO user_roles` for now.
+
+## Security notes
+
+- Passwords are hashed with `password_hash()` (bcrypt) — never stored
+  or logged in plaintext.
+- The session cookie (`bogdany_session`, one week) is **HttpOnly** — it
+  can't be read from JavaScript at all, on purpose. The terminal asks
+  `auth-api/me.php` who's logged in instead of reading the cookie itself.
+- `login.php` returns the same generic error for "no such user" and
+  "wrong password", so it can't be used to check which usernames exist.
+- `request-password-reset.php` always responds the same way whether or
+  not the email matched an account, for the same reason.
+- Verification and reset tokens are single-use GUIDs with short
+  expiries (24h / 1h) and are marked used, not deleted, so they can't
+  be replayed even by someone with database access to the used row.
+- Resetting a password invalidates every existing session for that
+  account — a stolen cookie doesn't survive a reset.
+- `delete-account.php` **never deletes a row**. It flips `is_deleted`,
+  which blocks future logins; the account and every message tied to it
+  stay exactly where they are.
+
+---
+
+# Site chat (requires a verified account)
 
 A small sitewide chat lives in the terminal (`index.htm`) itself — click
 **[chat]** in the toolbar, or press **Ctrl+/** (**Cmd+/** on Mac) to toggle
 it. It's a side panel, not the game window, so opening it never interrupts
 whatever game is currently running.
 
+Chat is gated behind a **verified login** (see Accounts, above) — both
+reading history and sending require it. Trying to open the panel while
+anonymous or unverified shows a message telling you to `register` or
+`login` instead of opening.
+
 ```
 chat-api/
   config.php       your MySQL credentials for the "chats" database — EDIT THIS
   common.php       shared DB connection + JSON helpers (no editing needed)
-  send.php         POST — post a message
-  history.php      GET  — fetch recent messages / poll for new ones
-  schema.sql        run this once to create the messages table
+  send.php         POST — post a message (requires a verified session)
+  history.php      GET  — fetch recent messages / poll for new ones (requires a verified session)
+  schema.sql        run this once — creates accounts + messages (see above)
 ```
 
 ## Setup
@@ -162,22 +239,22 @@ Same pattern as Suzen, but its own database — **don't** point this at the
    and a user with **All Privileges** on it.
 2. In phpMyAdmin, run `chat-api/schema.sql` against that database.
 3. Edit `chat-api/config.php` with that database's host/name/user/password.
-4. Upload `chat-api/` (including `.htaccess`) as a sibling of `index.htm`.
+4. Upload `chat-api/` and `auth-api/` (each including its `.htaccess`)
+   as siblings of `index.htm`.
 
 ## Security notes
 
-- Every query in `chat-api/` uses a PDO **prepared statement** with bound
-  parameters — request data is never concatenated into SQL, which is what
-  actually prevents SQL injection (not escaping/filtering).
+- Every query in `chat-api/` and `auth-api/` uses a PDO **prepared
+  statement** with bound parameters — request data is never
+  concatenated into SQL, which is what actually prevents SQL injection
+  (not escaping/filtering).
 - Message bodies are rendered client-side with `textContent`, never
   `innerHTML`, so a message can't be interpreted as HTML/script no matter
   what it contains.
-- `send.php` requires an `application/json` request body, which a plain
-  cross-site `<form>` can't produce — that blocks the classic CSRF vector
-  even though this chat has no login system to protect.
-- Basic flood control (per browser-generated client id, not IP): one
-  message per 1.5s, max 20/minute.
-- The chat only remembers your display name and identity **after you
-  accept cookies** in the site's existing GDPR banner; `delete-cookies`
-  wipes it along with everything else.
-
+- `send.php` requires an `application/json` request body (blocks naive
+  cross-site `<form>` forgery) **and** a verified session — the
+  `author` on every message is always the account's official
+  `username`, taken from the session server-side, never anything the
+  client sends.
+- Flood control is now keyed off the account (`user_id`), not the
+  browser: one message per 1.5s, max 20/minute.

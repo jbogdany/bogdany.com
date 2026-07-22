@@ -480,7 +480,6 @@
     if (typeof currentBgHex !== "undefined" && currentBgHex) setCookie(BG_COLOR_KEY, currentBgHex, 365);
     if (typeof cmdHistory !== "undefined" && cmdHistory.length) saveHistoryCookie();
     if (typeof chatClientId !== "undefined" && chatClientId) setCookie(CHAT_ID_KEY, chatClientId, 365);
-    if (typeof chatDisplayName !== "undefined" && chatDisplayName) setCookie(CHAT_NAME_KEY, chatDisplayName, 365);
     if (typeof chatSoundEnabled !== "undefined") setCookie(CHAT_SOUND_KEY, chatSoundEnabled ? "on" : "off", 365);
   }
 
@@ -525,10 +524,22 @@
     if (typeof cmdHistory !== "undefined") cmdHistory = [];
     if (typeof resetChatIdentity === "function") resetChatIdentity();
     showCookieBanner();
-    return [
-      ["all cookies deleted.", "dim"],
-      ["text color, background, command history, and chat identity reset to defaults.", "dim"]
-    ];
+
+    // the account session cookie is HttpOnly (invisible to document.cookie,
+    // deliberately) so deleteAllCookies() above can't touch it — log out
+    // server-side too, or "all cookies deleted" would be a small lie
+    var wasLoggedIn = !!currentUser;
+    var afterLines = function () {
+      currentUser = null;
+      username = "guest" + genHex(3);
+      chatUpdateAvailability();
+      return [
+        ["all cookies deleted.", "dim"],
+        ["text color, background, command history, and chat identity reset to defaults.", "dim"]
+      ];
+    };
+    if (!wasLoggedIn) return afterLines();
+    return authPost("logout.php", {}).then(afterLines).catch(afterLines);
   }
 
   // ---------- chat ----------
@@ -542,9 +553,32 @@
   // if you're mid-game.
   var CHAT_API = "chat-api/";
   var CHAT_ID_KEY = "bogdany-chat-id";
-  var CHAT_NAME_KEY = "bogdany-chat-name";
   var CHAT_SOUND_KEY = "bogdany-chat-sound";
   var CHAT_POLL_MS = 3000;
+
+  // ---------- accounts ----------
+  // The account session itself lives in an HttpOnly cookie set by
+  // auth-api/ (not readable from here — that's the point), so login
+  // state is always asked for via me.php rather than read locally.
+  var AUTH_API = "auth-api/";
+  var currentUser = null; // {username, email, verified, roles} once logged in; null = guest
+
+  function authPost(path, body) {
+    return fetch(AUTH_API + path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+    });
+  }
+  function authGet(path) {
+    return fetch(AUTH_API + path, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+      });
+  }
 
   function genHex(len) {
     var s = "";
@@ -557,12 +591,10 @@
     chatClientId = genHex(32);
     if (hasConsent()) setCookie(CHAT_ID_KEY, chatClientId, 365);
   }
-  var chatDisplayName = getCookie(CHAT_NAME_KEY) || "";
   var chatSoundEnabled = getCookie(CHAT_SOUND_KEY) !== "off";
 
   function resetChatIdentity() {
     chatClientId = genHex(32);
-    chatDisplayName = "";
     chatSoundEnabled = true;
     chatLastId = 0;
     chatInitialLoadDone = false;
@@ -570,15 +602,18 @@
     updateChatSoundButton();
   }
 
-  function ensureChatName() {
-    if (chatDisplayName) return chatDisplayName;
-    var suggested = "guest" + genHex(3);
-    var typed = window.prompt("Pick a display name for chat (blank = " + suggested + "):", "");
-    if (typed === null) return null; // cancelled
-    var name = typed.trim().slice(0, 40) || suggested;
-    chatDisplayName = name;
-    if (hasConsent()) setCookie(CHAT_NAME_KEY, name, 365);
-    return name;
+  // Available once currentUser is set AND verified — see chatUpdateAvailability().
+  function chatAvailable() {
+    return !!(currentUser && currentUser.verified);
+  }
+
+  function chatUpdateAvailability() {
+    if (chatAvailable()) {
+      chatStartPolling();
+    } else {
+      chatStopPolling();
+      closeChat();
+    }
   }
 
   function setChatSound(enabled) {
@@ -604,7 +639,7 @@
     return [
       ["chat notification sound: " + (chatSoundEnabled ? "on" : "off"), "dim"],
       ["  chat sound on|off      turn the new-message chime on/off", "faint"],
-      ["  Ctrl+/ or [chat]       toggle the chat panel", "faint"]
+      ["  Ctrl+/ or [chat]       toggle the chat panel (requires a verified account)", "faint"]
     ];
   }
 
@@ -712,13 +747,19 @@
 
   function chatFetchHistory() {
     var url = CHAT_API + "history.php?limit=30" + (chatLastId ? "&after_id=" + chatLastId : "");
-    fetch(url, { headers: { "Accept": "application/json" } })
-      .then(function (r) { if (!r.ok) throw new Error("bad response"); return r.json(); })
+    fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) { chatStopPolling(); throw new Error("locked"); }
+        if (!r.ok) throw new Error("bad response");
+        return r.json();
+      })
       .then(function (data) {
         if (chatOpen) chatSetStatus("");
         if (data && Array.isArray(data.messages)) chatAppend(data.messages);
       })
-      .catch(function () { if (chatOpen) chatSetStatus("connection problem"); });
+      .catch(function (e) {
+        if (chatOpen && e.message !== "locked") chatSetStatus("connection problem");
+      });
   }
 
   // Polling runs continuously from boot, independent of whether the panel
@@ -735,13 +776,15 @@
   function chatSend(text) {
     text = (text || "").trim();
     if (!text) return;
-    var name = ensureChatName();
-    if (name === null) return; // user cancelled the name prompt
+    if (!chatAvailable()) { chatSetStatus("verify your account to chat"); return; }
     chatSetStatus("sending...");
     fetch(CHAT_API + "send.php", {
       method: "POST",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ author: name, body: text, client_id: chatClientId })
+      // no `author` — the server stamps the logged-in account's official
+      // username, never a client-supplied name
+      body: JSON.stringify({ body: text, client_id: chatClientId })
     })
       .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
       .then(function (res) {
@@ -753,6 +796,13 @@
   }
 
   function openChat() {
+    if (!chatAvailable()) {
+      printLine(!currentUser
+        ? "chat requires a verified account \u2014 try `register` (or `login` if you already have one)."
+        : "chat is locked until you verify your email \u2014 check your inbox for the link.", "dim");
+      if (inputEl) inputEl.focus({ preventScroll: true });
+      return;
+    }
     chatOpen = true;
     chatPanel.hidden = false;
     btnChat.classList.add("active");
@@ -807,7 +857,7 @@
     }
   });
 
-  chatStartPolling();
+  // polling starts once boot() confirms a verified login — see chatUpdateAvailability()
 
   // ---------- helpers ----------
   function el(tag, cls, text) {
@@ -1270,7 +1320,7 @@
         ["    bgcolor reset        back to black", "faint"],
         ["  bgcolour               alias for bgcolor", ""],
         ["  blackjack              beat the dealer to 21", ""],
-        ["  chat                   show chat notification-sound status", ""],
+        ["  chat                   show chat notification-sound status (chat itself needs a verified account)", ""],
         ["    chat sound on|off    turn the new-message chime on/off", "faint"],
         ["  chess                  versus the machine", ""],
         ["  clear                  wipe the screen", ""],
@@ -1285,6 +1335,7 @@
         ["    cookies accept       allow settings to be remembered", "faint"],
         ["    cookies decline      stop remembering anything new", "faint"],
         ["    cookies clear        forget your choice, ask again", "faint"],
+        ["  delete-account         permanently disable your account (chat history stays, tied to your name)", ""],
         ["  delete-cookies         wipe every cookie this site has set", ""],
         ["  exit                   good luck with that", ""],
         ["  go                     the ancient game", ""],
@@ -1292,6 +1343,8 @@
         ["  history                list your last 20 commands", ""],
         ["    history clear        wipe stored command history", "faint"],
         ["  jeopardy               keep score against each other", ""],
+        ["  login                  log in with an existing username + password", ""],
+        ["  logout                 log out, continue as a guest", ""],
         ["  mahjong                play a round", ""],
         ["  mail                   about the mail here", ""],
         ["  mancala                sow, capture, repeat", ""],
@@ -1304,6 +1357,9 @@
         ["    radio search <term>  find stations on radio-browser.info", "faint"],
         ["    radio vol <0-100>    set volume", "faint"],
         ["    radio stop           turn it off", "faint"],
+        ["  register               create a permanent account (verify by email to unlock chat)", ""],
+        ["  reset-password         request a password-reset email (must be logged out)", ""],
+        ["    reset-password <tok> finish a reset using the token from that email", "faint"],
         ["  reversi                flip discs, hold the board", ""],
         ["  scrabble               fun with words", ""],
         ["  snake                  eat, grow, don't crash", ""],
@@ -1312,6 +1368,7 @@
         ["  suzen                  difficult to master, yet easy to learn", ""],
         ["  tetris                 clear the lines", ""],
         ["  uptime                 how long you've been staring at this", ""],
+        ["  whoami                 show your current login name", ""],
         ["  whois <domain>         domain registration lookup", ""],
         ["    whois               defaults to bogdany.com", "faint"],
         ["  yahtzee                dice, categories, luck", ""],
@@ -1470,10 +1527,83 @@
       return [["Nice try.", "dim"]];
     },
     whoami: function () {
-      return [[username, ""]];
+      if (currentUser) return [[username + (currentUser.verified ? " (verified)" : " (unverified \u2014 check your email)"), ""]];
+      return [[username + " (guest \u2014 not logged in)", ""]];
     },
     pwd: function () {
       return [["/home/guest — and that's as deep as it gets", "dim"]];
+    },
+    login: function () {
+      if (currentUser) return [["already logged in as " + currentUser.username + " \u2014 try `logout` first.", "dim"]];
+      return (async function () {
+        var uname = await askLine("username: ");
+        uname = (uname || "").trim();
+        if (!uname) return [["login cancelled.", "dim"]];
+        var pw = await askLine("password: ", { masked: true });
+        var res = await authPost("login.php", { username: uname, password: pw });
+        if (!res.ok) return [[(res.data && res.data.error) || "login failed", "dim"]];
+        currentUser = res.data.user;
+        username = currentUser.username;
+        chatUpdateAvailability();
+        return [["logged in as " + username + (currentUser.verified ? "" : " (unverified \u2014 verify your email to unlock chat)"), "dim"]];
+      })();
+    },
+    logout: function () {
+      if (!currentUser) return [["not logged in.", "dim"]];
+      return authPost("logout.php", {}).then(function () {
+        currentUser = null;
+        username = "guest" + genHex(3);
+        chatUpdateAvailability();
+        return [["logged out. continuing as " + username + ".", "dim"]];
+      });
+    },
+    register: function () {
+      if (currentUser) return [["already logged in as " + currentUser.username + ".", "dim"]];
+      return (async function () {
+        var suggested = username && username.indexOf("guest") === 0 ? username : "guest" + genHex(3);
+        var name = await registerFlow(suggested);
+        if (name) {
+          username = name;
+          chatUpdateAvailability();
+          return [["you're in.", "dim"]];
+        }
+        return [["registration cancelled.", "dim"]];
+      })();
+    },
+    "reset-password": function (args) {
+      if (currentUser) return [["log out first.", "dim"]];
+      var token = (args && args[0]) || "";
+      if (token) {
+        return (async function () {
+          var pw1 = await askLine("new password: ", { masked: true });
+          var pw2 = await askLine("confirm new password: ", { masked: true });
+          if (pw1 !== pw2) return [["passwords didn't match.", "dim"]];
+          var res = await authPost("reset-password.php", { token: token, password: pw1 });
+          if (!res.ok) return [[(res.data && res.data.error) || "reset failed", "dim"]];
+          return [["password updated \u2014 you can `login` now.", "dim"]];
+        })();
+      }
+      return (async function () {
+        var email = await askLine("account email: ");
+        var res = await authPost("request-password-reset.php", { email: (email || "").trim() });
+        return [[(res.data && res.data.message) || "if that email has an account, a reset link is on its way.", "dim"]];
+      })();
+    },
+    "delete-account": function () {
+      if (!currentUser) return [["not logged in.", "dim"]];
+      return (async function () {
+        var sure = await askYesNo(
+          "permanently disable \"" + currentUser.username + "\"? your chat history stays, but you'll need a new account to log back in. [y/N] ",
+          false
+        );
+        if (!sure) return [["cancelled.", "dim"]];
+        var res = await authPost("delete-account.php", {});
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't delete account", "dim"]];
+        currentUser = null;
+        username = "guest" + genHex(3);
+        chatUpdateAvailability();
+        return [["account deleted. continuing as " + username + ".", "dim"]];
+      })();
     }
   };
 
@@ -1585,6 +1715,56 @@
   let inputEl = null;
   let currentLine = null, currentLabel = null, currentCur = null;
   let username = "guest";
+
+  // A single-question terminal prompt — used by the login/register/reset
+  // flows to collect one answer at a time, distinct from the normal
+  // command prompt (newPrompt) which parses and dispatches a command.
+  // opts.masked switches the input to type="password" for the duration
+  // of that one answer (still plain HTTP-form input, not real terminal
+  // masking, but it keeps the value off-screen the same way a password
+  // field would on any other site).
+  function askLine(labelText, opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      const line = el("div", "prompt-line");
+      const label = el("span", "prompt-label", labelText);
+      const input = el("input");
+      input.setAttribute("autocomplete", opts.masked ? "new-password" : "off");
+      input.setAttribute("autocapitalize", "off");
+      input.setAttribute("spellcheck", "false");
+      input.setAttribute("aria-label", labelText);
+      if (opts.masked) input.type = "password";
+      const cur = el("span", "cursor");
+      line.appendChild(label);
+      line.appendChild(input);
+      line.appendChild(cur);
+      term.appendChild(line);
+      inputEl = input;
+
+      input.addEventListener("input", function () {
+        input.style.width = input.value.length + "ch";
+      });
+      input.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const val = input.value;
+        line.textContent = labelText + (opts.masked ? "*".repeat(val.length) : val);
+        cur.remove();
+        inputEl = null;
+        resolve(val);
+      });
+      input.focus();
+      scrollBottom();
+    });
+  }
+
+  function askYesNo(labelText, defaultYes) {
+    return askLine(labelText).then(function (val) {
+      val = (val || "").trim().toLowerCase();
+      if (val === "") return !!defaultYes;
+      return val.charAt(0) === "y";
+    });
+  }
 
   function newPrompt(prefill) {
     const line = el("div", "prompt-line");
@@ -1753,20 +1933,88 @@
     if (inputEl) inputEl.focus({ preventScroll: true });
   });
 
-  // ---------- boot sequence ----------
-  // logs straight in as "guest" — still typed out on screen so the boot
-  // sequence looks the same, just with nothing to type.
-  function autoLogin() {
-    return typeLine("bogdany.com login: guest", "dim", 28).then(function () {
-      return "guest";
-    });
+  // ---------- boot sequence / login ----------
+
+  // Walks someone who typed a brand-new name through turning it into a
+  // real account: username (default = the name they typed), password
+  // (twice), email. Used both at boot (after declining to stay a guest)
+  // and by the standalone `register` command.
+  async function registerFlow(suggestedName) {
+    var uname = await askLine("username [" + suggestedName + "]: ");
+    uname = (uname || "").trim().slice(0, 40) || suggestedName;
+
+    var pw1 = await askLine("password: ", { masked: true });
+    var pw2 = await askLine("confirm password: ", { masked: true });
+    if (pw1 !== pw2) {
+      printLine("passwords didn't match \u2014 try `register` again.", "dim");
+      return null;
+    }
+    var email = await askLine("email: ");
+    email = (email || "").trim();
+
+    var res = await authPost("register.php", { username: uname, password: pw1, email: email });
+    if (!res.ok) {
+      printLine((res.data && res.data.error) || "couldn't create that account", "dim");
+      return null;
+    }
+    currentUser = res.data.user;
+    printLine("account created \u2014 check " + email + " for a verification link to unlock chat.", "faint");
+    return currentUser.username;
+  }
+
+  // "keep the name permanently?" prompt shown right after someone picks
+  // a name at the login: prompt.
+  async function maybeClaimName(name) {
+    var keep = await askYesNo("keep the name \"" + name + "\" permanently? [y/N] ", false);
+    if (!keep) return name;
+    var created = await registerFlow(name);
+    return created || name;
+  }
+
+  async function bootLogin() {
+    // resume an existing account session if the weekly cookie is still valid
+    try {
+      var me = await authGet("me.php");
+      if (me.ok && me.data && me.data.user) {
+        await typeLine("bogdany.com login: " + me.data.user.username, "dim", 28);
+        currentUser = me.data.user;
+        printLine("Welcome back, " + currentUser.username + ".", "faint");
+        return currentUser.username;
+      }
+    } catch (e) { /* auth-api unreachable — fall through to a fresh prompt */ }
+
+    // no session — real interactive login, not a fake typed line
+    var typed = await askLine("bogdany.com login: ");
+    typed = (typed || "").trim().slice(0, 40);
+
+    if (typed === "") {
+      var guestName = "guest" + genHex(3);
+      printLine("(blank \u2014 continuing as " + guestName + ")", "faint");
+      return await maybeClaimName(guestName);
+    }
+
+    var pw = await askLine("password: ", { masked: true });
+    var loginRes = await authPost("login.php", { username: typed, password: pw });
+
+    if (loginRes.ok && loginRes.data && loginRes.data.user) {
+      currentUser = loginRes.data.user;
+      printLine("Welcome back, " + currentUser.username + ".", "faint");
+      return currentUser.username;
+    }
+
+    printLine((loginRes.data && loginRes.data.error) || "login failed", "dim");
+    var makeIt = await askYesNo("no account logged in as \"" + typed + "\" \u2014 register it now? [y/N] ", false);
+    if (makeIt) {
+      var created = await registerFlow(typed);
+      if (created) return created;
+    }
+    printLine("continuing as guest \"" + typed + "\" for this session.", "faint");
+    return typed;
   }
 
   async function boot() {
-    username = await autoLogin();
+    username = await bootLogin();
     await pause(250);
-    await typeLine("password: ********", "dim", 40);
-    await pause(500);
     printLine("Last login: " + new Date().toDateString() + " from somewhere.on.the.internet", "faint");
     await pause(400);
     printLine("");
@@ -1774,6 +2022,7 @@
       await typeLine(pair[0], pair[1], 14);
     }
     printLine("");
+    chatUpdateAvailability();
     var params = new URLSearchParams(location.search);
     var runParam = params.get("run");
     newPrompt(runParam || null);
