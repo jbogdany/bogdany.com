@@ -1,0 +1,1786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>bogdany.com — just an old Flash programmer...</title>
+<meta name="description" content="bogdany.com — just an old Flash programmer...">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(13px, 1.6vw, 16px);
+    line-height: 1.55;
+    overflow: hidden;
+  }
+
+  /* background image layer, set via the `background` command */
+  #bgLayer {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-color: var(--bg);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: background-image 0.25s ease;
+  }
+  #bgLayer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(var(--bg-rgb), 0.88);
+  }
+
+  .screen {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: clamp(16px, 4vw, 48px);
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  #terminal {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: none;
+    text-shadow: 0 0 6px var(--glow);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #terminal::-webkit-scrollbar { display: none; }
+
+  .prompt-line {
+    display: flex;
+    align-items: baseline;
+  }
+  .prompt-label { flex: none; }
+
+  #cmd {
+    flex: 0 1 auto;
+    width: 0ch;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--amber);
+    font: inherit;
+    text-shadow: inherit;
+    caret-color: transparent;
+    padding: 0;
+  }
+
+  .ghost {
+    white-space: pre;
+    text-shadow: none;
+    pointer-events: none;
+  }
+
+  .statusbar {
+    flex: none;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.82em;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    text-shadow: none;
+  }
+
+  /* radio player bar */
+  .player {
+    flex: none;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding-top: 8px;
+    color: var(--amber-dim);
+    text-shadow: 0 0 6px var(--glow);
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .player[hidden] { display: none; }
+  .player .note { animation: notepulse 1.6s ease-in-out infinite alternate; }
+  @keyframes notepulse { from { opacity: 0.45; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .player .note { animation: none; } }
+  .player .track { overflow: hidden; text-overflow: ellipsis; }
+  .player button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .player button:hover { color: var(--amber); }
+
+  /* embedded game window */
+  .gamewin {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+  .gamewin[hidden] { display: none; }
+  .gamewin .bar {
+    flex: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    padding: 10px clamp(16px, 4vw, 48px);
+    border-bottom: 1px solid var(--amber-faint);
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .gamewin .bar .dim { color: var(--amber-dim); }
+  .gamewin .bar .bar-actions { display: flex; gap: 12px; }
+  .gamewin .bar button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .gamewin .bar button:hover, .gamewin .bar button:focus-visible {
+    color: var(--amber);
+    outline: none;
+  }
+  #btn-chat.unread, #gamebarChat.unread {
+    color: var(--amber);
+    animation: bogdany-chatblink 1s steps(1) infinite;
+  }
+  @keyframes bogdany-chatblink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) {
+    #btn-chat.unread, #gamebarChat.unread { animation: none; text-decoration: underline; }
+  }
+  .gamewin iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: var(--bg);
+  }
+
+  /* color controls */
+  .toolbar {
+    flex: none;
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 2px;
+  }
+  .toolbar button {
+    background: transparent;
+    border: none;
+    color: var(--amber-faint);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .toolbar button:hover, .toolbar button:focus-visible { color: var(--amber); outline: none; }
+
+  .colorpanel {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 0 2px;
+  }
+  .colorpanel[hidden] { display: none; }
+  .colorgroup {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+  .colorgroup .grouplabel {
+    color: var(--amber-faint);
+    font-size: 0.78em;
+    width: 34px;
+    flex: none;
+  }
+  .swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid var(--amber-faint);
+    cursor: pointer;
+    flex: none;
+  }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.active { outline: 2px solid var(--amber); outline-offset: 1px; }
+  #colorpicker, #bgcolorpicker {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--amber-faint);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    flex: none;
+  }
+  #colorhex, #bgcolorhex {
+    font-size: 0.82em;
+    color: var(--amber-faint);
+  }
+
+  /* chat panel — independent overlay, never touches #gamewin */
+  .chatpanel {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: min(340px, 88vw);
+    background: rgba(var(--bg-rgb), 0.97);
+    border-left: 1px solid var(--amber-faint);
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.4);
+  }
+  .chatpanel[hidden] { display: none; }
+  .chatbar {
+    flex: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--amber-faint);
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .chatbar .bar-actions { display: flex; gap: 10px; }
+  .chatlog {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 14px;
+    scrollbar-width: none;
+  }
+  .chatlog::-webkit-scrollbar { display: none; }
+  .chatmsg { margin-bottom: 10px; line-height: 1.4; font-size: 0.9em; word-break: break-word; }
+  .chatmsg .who { color: var(--amber-dim); }
+  .chatmsg.own .who { color: var(--amber); }
+  .chatmsg .body { color: var(--amber-dim); }
+  .chatmsg.own .body { color: var(--amber); }
+  .chatmsg .when { color: var(--amber-faint); font-size: 0.78em; margin-left: 4px; }
+  .chatempty { color: var(--amber-faint); font-size: 0.88em; }
+  .chatform {
+    flex: none;
+    display: flex;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--amber-faint);
+  }
+  .chatform input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    border-radius: 4px;
+    color: var(--amber);
+    font: inherit;
+    padding: 6px 8px;
+    outline: none;
+  }
+  .chatform input:focus { border-color: var(--amber); }
+  .chatform button { flex: none; }
+  #btn-chat.active { color: var(--amber); text-decoration: underline; }
+
+  /* GDPR cookie banner */
+  .cookiebanner {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 30;
+    background: rgba(var(--bg-rgb), 0.97);
+    border-top: 1px solid var(--amber-faint);
+    padding: 14px clamp(16px, 4vw, 48px);
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .cookiebanner[hidden] { display: none; }
+  .cookiebanner .msg {
+    max-width: 900px;
+    margin: 0 auto 10px;
+    color: var(--amber-dim);
+    font-size: 0.88em;
+    line-height: 1.5;
+  }
+  .cookiebanner .msg b { color: var(--amber); }
+  .cookiebanner .actions {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .cookiebanner button {
+    background: transparent;
+    border: none;
+    color: var(--amber);
+    font: inherit;
+    font-size: 0.95em;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .cookiebanner button.decline { color: var(--amber-dim); }
+  .cookiebanner button:hover, .cookiebanner button:focus-visible { color: var(--amber); outline: none; text-decoration: underline; }
+</style>
+</head>
+<body>
+<div id="bgLayer" aria-hidden="true"></div>
+<div class="crt" aria-hidden="true"></div>
+<div class="screen">
+  <div id="terminal" role="log" aria-live="polite"></div>
+  <div class="player" id="player" hidden>
+    <span class="note">&#9834;</span>
+    <span class="track" id="playertrack"></span>
+    <button id="playerstop">[stop]</button>
+  </div>
+  <div class="toolbar">
+    <button id="btn-color">[colors]</button>
+    <button id="btn-chat" title="toggle chat (Ctrl+/)">[chat]</button>
+  </div>
+  <div class="colorpanel" id="colorpanel" hidden>
+    <div class="colorgroup">
+      <span class="grouplabel">text</span>
+      <div class="swatches" id="swatches"></div>
+      <input type="color" id="colorpicker" aria-label="custom text color" value="#ffb000">
+      <span id="colorhex">#ffb000</span>
+    </div>
+    <div class="colorgroup">
+      <span class="grouplabel">bg</span>
+      <div class="swatches" id="bgswatches"></div>
+      <input type="color" id="bgcolorpicker" aria-label="custom background color" value="#0d0b07">
+      <span id="bgcolorhex">#0d0b07</span>
+    </div>
+  </div>
+  <div class="statusbar" aria-hidden="true">
+    <span>bogdany.com</span>
+    <span>tty1</span>
+    <span id="clock"></span>
+  </div>
+</div>
+
+<div class="gamewin" id="gamewin" hidden>
+  <div class="bar">
+    <span><span id="gameuser">guest</span>@bogdany:~$ <span class="dim" id="gametitle"></span></span>
+    <span class="bar-actions">
+      <button id="gamebarChat" title="toggle chat (Ctrl+/)">[chat]</button>
+      <button id="gameclose">[exit]</button>
+    </span>
+  </div>
+  <iframe id="gameframe" title="game"></iframe>
+</div>
+
+<div class="chatpanel" id="chatPanel" hidden>
+  <div class="chatbar">
+    <span>chat <span class="dim" id="chatStatus"></span></span>
+    <span class="bar-actions">
+      <button id="chatSoundToggle" title="toggle notification sound">[&#128266;]</button>
+      <button id="chatClose">[close]</button>
+    </span>
+  </div>
+  <div class="chatlog" id="chatLog" role="log" aria-live="polite"></div>
+  <form class="chatform" id="chatForm" autocomplete="off">
+    <input type="text" id="chatInput" maxlength="500" autocomplete="off" placeholder="say something..." aria-label="chat message">
+    <button type="submit">[send]</button>
+  </form>
+</div>
+
+<div class="cookiebanner" id="cookieBanner" hidden>
+  <div class="msg">
+    This site uses cookies to remember things like your <b>text color</b>, <b>background</b>, and
+    <b>command history</b> between visits. Nothing is shared with anyone else. If you decline, the
+    site still works fully — your choices just won't be remembered next time. See <code>help</code> →
+    <code>cookies</code> to change your mind later, or <code>delete-cookies</code> to wipe everything.
+  </div>
+  <div class="actions">
+    <button id="cookieAccept">[accept]</button>
+    <button class="decline" id="cookieDecline">[decline]</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  const term = document.getElementById("terminal");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const bootTime = Date.now();
+
+  // ---------- cookies ----------
+  function setCookie(name, value, days) {
+    var expires = "";
+    if (days) {
+      var d = new Date();
+      d.setTime(d.getTime() + days * 24 * 60 * 60 * 1000);
+      expires = "; expires=" + d.toUTCString();
+    }
+    document.cookie = name + "=" + encodeURIComponent(value) + expires + "; path=/; SameSite=Lax";
+  }
+  function getCookie(name) {
+    var esc = name.replace(/[.$?*|{}()\[\]\\\/+^]/g, "\\$&");
+    var match = document.cookie.match(new RegExp("(?:^|; )" + esc + "=([^;]*)"));
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+  function deleteCookie(name) {
+    document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
+  }
+  function deleteAllCookies() {
+    var all = document.cookie.split(";");
+    for (var i = 0; i < all.length; i++) {
+      var eqPos = all[i].indexOf("=");
+      var name = (eqPos > -1 ? all[i].substr(0, eqPos) : all[i]).trim();
+      if (name) deleteCookie(name);
+    }
+  }
+
+  // ---------- GDPR cookie consent ----------
+  var CONSENT_KEY = "bogdany-cookie-consent";
+  function getConsent() { return getCookie(CONSENT_KEY); }
+  function hasConsent() { return getConsent() === "accepted"; }
+  function setConsent(value) { setCookie(CONSENT_KEY, value, 365); }
+
+  var cookieBanner = document.getElementById("cookieBanner");
+  function showCookieBanner() { cookieBanner.hidden = false; }
+  function hideCookieBanner() { cookieBanner.hidden = true; }
+  if (!getConsent()) showCookieBanner();
+
+  document.getElementById("cookieAccept").addEventListener("click", function () {
+    setConsent("accepted");
+    hideCookieBanner();
+    printLine("cookies accepted — your settings will be remembered.", "dim");
+    persistCurrentSettings();
+    if (inputEl) inputEl.focus();
+  });
+  document.getElementById("cookieDecline").addEventListener("click", function () {
+    setConsent("declined");
+    hideCookieBanner();
+    printLine("cookies declined — nothing will be remembered between visits.", "dim");
+    if (inputEl) inputEl.focus();
+  });
+
+  // called once, right after the user accepts — saves whatever is already
+  // active in this session (theme, background, history) so accepting mid-way
+  // through a visit doesn't lose anything
+  function persistCurrentSettings() {
+    if (typeof window.applyBogdanyTheme === "function" && typeof currentHex !== "undefined") {
+      window.applyBogdanyTheme(currentHex, true);
+    }
+    if (typeof currentBgValue !== "undefined" && currentBgValue) setCookie(BG_KEY, currentBgValue, 365);
+    if (typeof currentBgHex !== "undefined" && currentBgHex) setCookie(BG_COLOR_KEY, currentBgHex, 365);
+    if (typeof cmdHistory !== "undefined" && cmdHistory.length) saveHistoryCookie();
+    if (typeof chatClientId !== "undefined" && chatClientId) setCookie(CHAT_ID_KEY, chatClientId, 365);
+    if (typeof chatDisplayName !== "undefined" && chatDisplayName) setCookie(CHAT_NAME_KEY, chatDisplayName, 365);
+    if (typeof chatSoundEnabled !== "undefined") setCookie(CHAT_SOUND_KEY, chatSoundEnabled ? "on" : "off", 365);
+  }
+
+  function cookiesCmd(args) {
+    var sub = ((args || [])[0] || "").toLowerCase();
+    if (!sub) {
+      return [
+        ["cookie consent: " + (getConsent() || "not yet decided"), "dim"],
+        ["  cookies accept      allow settings to be remembered", "faint"],
+        ["  cookies decline     stop remembering anything new", "faint"],
+        ["  cookies clear       forget your choice \u2014 the banner reappears", "faint"],
+        ["  delete-cookies      wipe every cookie this site has set", "faint"]
+      ];
+    }
+    if (sub === "accept") {
+      setConsent("accepted");
+      hideCookieBanner();
+      persistCurrentSettings();
+      return [["cookies accepted \u2014 your settings will be remembered.", "dim"]];
+    }
+    if (sub === "decline") {
+      setConsent("declined");
+      hideCookieBanner();
+      return [["cookies declined \u2014 nothing will be remembered between visits.", "dim"]];
+    }
+    if (sub === "clear") {
+      deleteCookie(CONSENT_KEY);
+      showCookieBanner();
+      return [["consent choice cleared \u2014 asking again.", "dim"]];
+    }
+    return [["usage: cookies [accept|decline|clear]", "dim"]];
+  }
+
+  function deleteCookiesCmd() {
+    deleteAllCookies();
+    // reset everything in memory too, so the change is visible immediately
+    if (typeof window.applyBogdanyTheme === "function") window.applyBogdanyTheme("ffb000", false);
+    if (typeof currentHex !== "undefined") currentHex = "ffb000";
+    if (typeof refreshPanel === "function") refreshPanel();
+    if (typeof setBgColor === "function") setBgColor(BG_COLOR_DEFAULT, false);
+    if (typeof clearBackground === "function") clearBackground(false);
+    if (typeof cmdHistory !== "undefined") cmdHistory = [];
+    if (typeof resetChatIdentity === "function") resetChatIdentity();
+    showCookieBanner();
+    return [
+      ["all cookies deleted.", "dim"],
+      ["text color, background, command history, and chat identity reset to defaults.", "dim"]
+    ];
+  }
+
+  // ---------- chat ----------
+  // A small, independent overlay — it never touches #gamewin, so opening or
+  // closing it can't interrupt whatever game is currently running in the
+  // main frame. Toggle with the [chat] button (in the toolbar, or in the
+  // game window's own bar next to [exit] while a game is loaded) or
+  // Ctrl+/ (Cmd+/ on Mac). Polling runs continuously in the background —
+  // this script keeps running even while a game iframe covers the screen —
+  // so a new message can blink the chat button and (optionally) chime even
+  // if you're mid-game.
+  var CHAT_API = "chat-api/";
+  var CHAT_ID_KEY = "bogdany-chat-id";
+  var CHAT_NAME_KEY = "bogdany-chat-name";
+  var CHAT_SOUND_KEY = "bogdany-chat-sound";
+  var CHAT_POLL_MS = 3000;
+
+  function genHex(len) {
+    var s = "";
+    while (s.length < len) s += Math.floor(Math.random() * 16).toString(16);
+    return s.slice(0, len);
+  }
+
+  var chatClientId = getCookie(CHAT_ID_KEY);
+  if (!chatClientId) {
+    chatClientId = genHex(32);
+    if (hasConsent()) setCookie(CHAT_ID_KEY, chatClientId, 365);
+  }
+  var chatDisplayName = getCookie(CHAT_NAME_KEY) || "";
+  var chatSoundEnabled = getCookie(CHAT_SOUND_KEY) !== "off";
+
+  function resetChatIdentity() {
+    chatClientId = genHex(32);
+    chatDisplayName = "";
+    chatSoundEnabled = true;
+    chatLastId = 0;
+    chatInitialLoadDone = false;
+    if (chatLogEl) chatLogEl.innerHTML = "";
+    updateChatSoundButton();
+  }
+
+  function ensureChatName() {
+    if (chatDisplayName) return chatDisplayName;
+    var suggested = "guest" + genHex(3);
+    var typed = window.prompt("Pick a display name for chat (blank = " + suggested + "):", "");
+    if (typed === null) return null; // cancelled
+    var name = typed.trim().slice(0, 40) || suggested;
+    chatDisplayName = name;
+    if (hasConsent()) setCookie(CHAT_NAME_KEY, name, 365);
+    return name;
+  }
+
+  function setChatSound(enabled) {
+    chatSoundEnabled = !!enabled;
+    updateChatSoundButton();
+    if (hasConsent()) setCookie(CHAT_SOUND_KEY, chatSoundEnabled ? "on" : "off", 365);
+  }
+
+  function updateChatSoundButton() {
+    if (!chatSoundToggleBtn) return;
+    chatSoundToggleBtn.innerHTML = chatSoundEnabled ? "[&#128266;]" : "[&#128263;]";
+    chatSoundToggleBtn.title = chatSoundEnabled ? "notification sound on \u2014 click to mute" : "notification sound off \u2014 click to unmute";
+  }
+
+  function chatCmd(args) {
+    var sub = ((args || [])[0] || "").toLowerCase();
+    if (sub === "sound") {
+      var val = ((args || [])[1] || "").toLowerCase();
+      if (val === "off") { setChatSound(false); return [["chat notification sound: off", "dim"]]; }
+      if (val === "on") { setChatSound(true); return [["chat notification sound: on", "dim"]]; }
+      return [["usage: chat sound on|off", "dim"]];
+    }
+    return [
+      ["chat notification sound: " + (chatSoundEnabled ? "on" : "off"), "dim"],
+      ["  chat sound on|off      turn the new-message chime on/off", "faint"],
+      ["  Ctrl+/ or [chat]       toggle the chat panel", "faint"]
+    ];
+  }
+
+  // Short synthesized "blip" via Web Audio — no external sound file needed.
+  var chatAudioCtx = null;
+  function playChatSound() {
+    try {
+      if (!chatAudioCtx) chatAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var ctx = chatAudioCtx;
+      if (ctx.state === "suspended") ctx.resume();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) { /* Web Audio unavailable or blocked — fail silently */ }
+  }
+
+  function chatNotifyNewMessage() {
+    btnChat.classList.add("unread");
+    if (gamebarChat) gamebarChat.classList.add("unread");
+    if (chatSoundEnabled) playChatSound();
+  }
+
+  function chatClearUnread() {
+    btnChat.classList.remove("unread");
+    if (gamebarChat) gamebarChat.classList.remove("unread");
+  }
+
+  var chatLastId = 0;
+  var chatInitialLoadDone = false;
+  var chatPollTimer = null;
+  var chatOpen = false;
+
+  var chatPanel = document.getElementById("chatPanel");
+  var chatLogEl = document.getElementById("chatLog");
+  var chatForm = document.getElementById("chatForm");
+  var chatInputEl = document.getElementById("chatInput");
+  var chatStatusEl = document.getElementById("chatStatus");
+  var btnChat = document.getElementById("btn-chat");
+  var chatCloseBtn = document.getElementById("chatClose");
+  var chatSoundToggleBtn = document.getElementById("chatSoundToggle");
+  var gamebarChat = document.getElementById("gamebarChat");
+
+  updateChatSoundButton();
+
+  function chatFmtTime(mysqlDatetime) {
+    if (!mysqlDatetime) return "";
+    var d = new Date(String(mysqlDatetime).replace(" ", "T"));
+    if (isNaN(d.getTime())) return "";
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mm = String(d.getMinutes()).padStart(2, "0");
+    return hh + ":" + mm;
+  }
+
+  // Renders with textContent only — never innerHTML — so a message body
+  // can't be interpreted as markup no matter what it contains. Also the
+  // single place that decides whether a batch of messages should trigger
+  // the unread blink/chime (real new messages from someone else, arriving
+  // after the panel's very first load — never the initial history, never
+  // your own just-sent message).
+  function chatAppend(messages) {
+    if (!messages || !messages.length) return;
+    var nearBottom = chatLogEl.scrollHeight - chatLogEl.scrollTop - chatLogEl.clientHeight < 60;
+    var gotNewFromOther = false;
+
+    messages.forEach(function (m) {
+      var id = Number(m.id);
+      if (!id || id <= chatLastId) return;
+      chatLastId = Math.max(chatLastId, id);
+      if (chatInitialLoadDone && m.client_id !== chatClientId) gotNewFromOther = true;
+
+      var row = document.createElement("div");
+      row.className = "chatmsg" + (m.client_id === chatClientId ? " own" : "");
+
+      var who = document.createElement("span");
+      who.className = "who";
+      who.textContent = (m.author || "guest") + ": ";
+
+      var body = document.createElement("span");
+      body.className = "body";
+      body.textContent = m.body || "";
+
+      var when = document.createElement("span");
+      when.className = "when";
+      when.textContent = chatFmtTime(m.created_at);
+
+      row.appendChild(who);
+      row.appendChild(body);
+      row.appendChild(when);
+      chatLogEl.appendChild(row);
+    });
+
+    if (nearBottom) chatLogEl.scrollTop = chatLogEl.scrollHeight;
+    if (gotNewFromOther && !chatOpen) chatNotifyNewMessage();
+    chatInitialLoadDone = true;
+  }
+
+  function chatSetStatus(text) { chatStatusEl.textContent = text ? "\u2014 " + text : ""; }
+
+  function chatFetchHistory() {
+    var url = CHAT_API + "history.php?limit=30" + (chatLastId ? "&after_id=" + chatLastId : "");
+    fetch(url, { headers: { "Accept": "application/json" } })
+      .then(function (r) { if (!r.ok) throw new Error("bad response"); return r.json(); })
+      .then(function (data) {
+        if (chatOpen) chatSetStatus("");
+        if (data && Array.isArray(data.messages)) chatAppend(data.messages);
+      })
+      .catch(function () { if (chatOpen) chatSetStatus("connection problem"); });
+  }
+
+  // Polling runs continuously from boot, independent of whether the panel
+  // is open or a game is loaded — that's what makes background unread
+  // notifications possible in the first place.
+  function chatStartPolling() {
+    chatStopPolling();
+    chatPollTimer = setInterval(chatFetchHistory, CHAT_POLL_MS);
+  }
+  function chatStopPolling() {
+    if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  }
+
+  function chatSend(text) {
+    text = (text || "").trim();
+    if (!text) return;
+    var name = ensureChatName();
+    if (name === null) return; // user cancelled the name prompt
+    chatSetStatus("sending...");
+    fetch(CHAT_API + "send.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ author: name, body: text, client_id: chatClientId })
+    })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (res) {
+        if (!res.ok) { chatSetStatus(res.data && res.data.error ? res.data.error : "couldn't send"); return; }
+        chatSetStatus("");
+        if (res.data && res.data.message) chatAppend([res.data.message]);
+      })
+      .catch(function () { chatSetStatus("connection problem"); });
+  }
+
+  function openChat() {
+    chatOpen = true;
+    chatPanel.hidden = false;
+    btnChat.classList.add("active");
+    chatClearUnread();
+    if (!chatLogEl.children.length) {
+      chatLogEl.innerHTML = "";
+      var hint = document.createElement("div");
+      hint.className = "chatempty";
+      hint.textContent = "loading...";
+      chatLogEl.appendChild(hint);
+      chatFetchHistory();
+      // the loading hint gets naturally replaced once messages render;
+      // if the room is genuinely empty, swap it for a friendlier message
+      setTimeout(function () {
+        if (chatLastId === 0 && chatLogEl.children.length === 1) {
+          hint.textContent = "no messages yet \u2014 say something!";
+        } else if (chatLastId !== 0) {
+          hint.remove();
+        }
+      }, 800);
+    } else {
+      chatFetchHistory();
+    }
+    chatInputEl.focus();
+  }
+
+  function closeChat() {
+    chatOpen = false;
+    chatPanel.hidden = true;
+    btnChat.classList.remove("active");
+    if (inputEl) inputEl.focus({ preventScroll: true });
+  }
+
+  function toggleChat() { chatOpen ? closeChat() : openChat(); }
+
+  btnChat.addEventListener("click", toggleChat);
+  if (gamebarChat) gamebarChat.addEventListener("click", toggleChat);
+  chatCloseBtn.addEventListener("click", closeChat);
+  chatSoundToggleBtn.addEventListener("click", function () { setChatSound(!chatSoundEnabled); });
+  chatForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var text = chatInputEl.value;
+    chatInputEl.value = "";
+    chatSend(text);
+  });
+  document.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+      e.preventDefault();
+      toggleChat();
+    } else if (e.key === "Escape" && chatOpen) {
+      closeChat();
+    }
+  });
+
+  chatStartPolling();
+
+  // ---------- helpers ----------
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function scrollBottom() { term.scrollTop = term.scrollHeight; }
+
+  function printLine(text, cls) {
+    const line = el("div", cls, text === "" ? "\u00a0" : text);
+    term.appendChild(line);
+    scrollBottom();
+    return line;
+  }
+
+  // typewriter that resolves when done
+  function typeLine(text, cls, speed) {
+    return new Promise(function (resolve) {
+      if (reducedMotion) { printLine(text, cls); resolve(); return; }
+      const line = printLine("", cls);
+      line.textContent = "";
+      let i = 0;
+      const cur = el("span", "cursor");
+      line.appendChild(cur);
+      (function tick() {
+        if (i < text.length) {
+          cur.before(document.createTextNode(text[i]));
+          i++;
+          scrollBottom();
+          setTimeout(tick, speed + Math.random() * speed);
+        } else {
+          cur.remove();
+          if (text === "") line.textContent = "\u00a0";
+          resolve();
+        }
+      })();
+    });
+  }
+
+  const pause = function (ms) {
+    return new Promise(function (r) { setTimeout(r, reducedMotion ? 0 : ms); });
+  };
+
+  // ---------- clock ----------
+  const clock = document.getElementById("clock");
+  function tickClock() {
+    clock.textContent = new Date().toLocaleTimeString([], { hour12: false });
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ---------- commands ----------
+  function fmtUptime() {
+    const s = Math.floor((Date.now() - bootTime) / 1000);
+    const m = Math.floor(s / 60), sec = s % 60;
+    return m + "m " + sec + "s";
+  }
+
+  const MOTD = [
+    ["Welcome to bogdany.com", ""],
+    ["just an old Flash programmer...", "dim"],
+    ["", ""],
+    ["Type `help` to look around.", "faint"]
+  ];
+
+  // ---------- radio ----------
+  var PRESETS = [
+    { name: "Groove Salad",    src: "SomaFM", url: "https://ice1.somafm.com/groovesalad-128-mp3" },
+    { name: "Drone Zone",      src: "SomaFM", url: "https://ice1.somafm.com/dronezone-128-mp3" },
+    { name: "DEF CON Radio",   src: "SomaFM", url: "https://ice1.somafm.com/defcon-128-mp3" },
+    { name: "Secret Agent",    src: "SomaFM", url: "https://ice1.somafm.com/secretagent-128-mp3" },
+    { name: "Underground 80s", src: "SomaFM", url: "https://ice1.somafm.com/u80s-128-mp3" },
+    { name: "Vaporwaves",      src: "SomaFM", url: "https://ice1.somafm.com/vaporwaves-128-mp3" }
+  ];
+  var stationList = PRESETS.slice();
+  var audio = null;
+  var volume = 0.8;
+  var playerEl = document.getElementById("player");
+  var playerTrack = document.getElementById("playertrack");
+
+  function playStation(st) {
+    stopRadio(true);
+    audio = new Audio(st.url);
+    audio.volume = volume;
+    audio.addEventListener("error", function () {
+      printLine("stream error: " + st.name + " — try another station", "dim");
+      stopRadio(true);
+    });
+    audio.play().catch(function () {
+      printLine("playback blocked — type the command again", "dim");
+    });
+    playerTrack.textContent = st.name + " — " + st.src;
+    playerEl.hidden = false;
+  }
+
+  function stopRadio(silent) {
+    if (audio) {
+      audio.pause();
+      audio.src = "";
+      audio = null;
+    }
+    playerEl.hidden = true;
+    if (!silent) printLine("radio off.", "dim");
+  }
+
+  document.getElementById("playerstop").addEventListener("click", function () {
+    if (audio) stopRadio(false);
+    if (inputEl) inputEl.focus();
+  });
+
+  function listStations(header) {
+    var lines = [[header, "dim"]];
+    for (var i = 0; i < stationList.length; i++) {
+      lines.push(["  " + (i + 1) + "  " + stationList[i].name + "  (" + stationList[i].src + ")", ""]);
+    }
+    return lines;
+  }
+
+  function searchStations(term) {
+    var hosts = ["de1.api.radio-browser.info", "nl1.api.radio-browser.info", "at1.api.radio-browser.info"];
+    function tryHost(i) {
+      if (i >= hosts.length) return Promise.reject(new Error("no server"));
+      var u = "https://" + hosts[i] + "/json/stations/search?name=" +
+              encodeURIComponent(term) + "&limit=25&hidebroken=true&order=clickcount&reverse=true";
+      return fetch(u).then(function (r) {
+        if (!r.ok) throw new Error("bad response");
+        return r.json();
+      }).catch(function () { return tryHost(i + 1); });
+    }
+    return tryHost(0).then(function (results) {
+      var seen = {}, out = [];
+      for (var i = 0; i < results.length && out.length < 8; i++) {
+        var st = results[i];
+        var url = st.url_resolved || st.url || "";
+        if (url.indexOf("https://") !== 0) continue; // avoid mixed-content blocks
+        var key = (st.name || "").trim().toLowerCase();
+        if (!key || seen[key]) continue;
+        seen[key] = true;
+        out.push({ name: st.name.trim(), src: st.country || "radio-browser", url: url });
+      }
+      if (!out.length) return [["no streams found for \"" + term + "\" — try another search", "dim"]];
+      stationList = out;
+      return listStations("stations matching \"" + term + "\" — `radio <n>` to tune in:");
+    }).catch(function () {
+      return [["station directory unreachable — presets still work (`radio`)", "dim"]];
+    });
+  }
+
+  function radioCmd(args) {
+    args = args || [];
+    var sub = (args[0] || "").toLowerCase();
+
+    if (!sub) {
+      stationList = PRESETS.slice();
+      return listStations("free internet radio — `radio <n>` to tune in:").concat([
+        ["", ""],
+        ["  radio search <term>   find stations (radio-browser.info)", "faint"],
+        ["  radio stop            silence", "faint"],
+        ["  radio vol <0-100>     volume", "faint"]
+      ]);
+    }
+    if (sub === "stop" || sub === "off") {
+      if (!audio) return [["the radio wasn't on.", "dim"]];
+      stopRadio(true);
+      return [["radio off.", "dim"]];
+    }
+    if (sub === "vol" || sub === "volume") {
+      var v = parseInt(args[1], 10);
+      if (isNaN(v) || v < 0 || v > 100) return [["usage: radio vol <0-100>", "dim"]];
+      volume = v / 100;
+      if (audio) audio.volume = volume;
+      return [["volume: " + v + "%", "dim"]];
+    }
+    if (sub === "search") {
+      var term = args.slice(1).join(" ");
+      if (!term) return [["usage: radio search <term>", "dim"]];
+      printLine("searching...", "faint");
+      return searchStations(term);
+    }
+    // tune by number or name
+    var n = parseInt(sub, 10);
+    var st = null;
+    if (!isNaN(n) && n >= 1 && n <= stationList.length) {
+      st = stationList[n - 1];
+    } else {
+      var q = args.join(" ").toLowerCase();
+      for (var i = 0; i < stationList.length; i++) {
+        if (stationList[i].name.toLowerCase().indexOf(q) !== -1) { st = stationList[i]; break; }
+      }
+      if (!st) {
+        for (var j = 0; j < PRESETS.length; j++) {
+          if (PRESETS[j].name.toLowerCase().indexOf(q) !== -1) { st = PRESETS[j]; break; }
+        }
+      }
+    }
+    if (!st) return [["no such station — `radio` lists them", "dim"]];
+    playStation(st);
+    return [["tuned in: " + st.name + " — " + st.src, "dim"]];
+  }
+
+  // ---------- background image ----------
+  var BG_KEY = "bogdany-bg";
+  var BG_DEFAULT_POOL = ["1.jpg", "2.jpg", "3.jpg", "4.jpg", "5.jpg"];
+  var bgLayer = document.getElementById("bgLayer");
+  var currentBgValue = "";
+
+  function randomDefaultBg() {
+    return BG_DEFAULT_POOL[Math.floor(Math.random() * BG_DEFAULT_POOL.length)];
+  }
+
+  function isSafeBgValue(v) {
+    v = (v || "").trim();
+    if (!v) return false;
+    var lower = v.toLowerCase();
+    if (lower.indexOf("javascript:") === 0 || lower.indexOf("data:") === 0) return false;
+    return true;
+  }
+
+  function applyBackground(value) {
+    if (!isSafeBgValue(value)) return false;
+    bgLayer.style.backgroundImage = 'url("' + value.replace(/"/g, '\\"') + '")';
+    currentBgValue = value;
+    return true;
+  }
+
+  function setBackground(value, announce) {
+    value = (value || "").trim();
+    if (!applyBackground(value)) {
+      if (announce) printLine("that doesn't look like a safe image URL or filename.", "dim");
+      return false;
+    }
+    if (hasConsent()) setCookie(BG_KEY, value, 365);
+    if (announce) printLine("background set: " + value, "dim");
+    return true;
+  }
+
+  function clearBackground(announce) {
+    bgLayer.style.backgroundImage = "none";
+    currentBgValue = "";
+    deleteCookie(BG_KEY);
+    if (announce) printLine("background cleared.", "dim");
+  }
+
+  function resetBackground(announce) {
+    deleteCookie(BG_KEY);
+    var pick = randomDefaultBg();
+    applyBackground(pick);
+    if (announce) printLine("background reset — showing " + pick, "dim");
+  }
+
+  (function initBackground() {
+    var saved = getCookie(BG_KEY);
+    if (saved) applyBackground(saved);
+    // otherwise: no background image until the user sets one with `background`
+  })();
+
+  function backgroundCmd(args) {
+    args = args || [];
+    var sub = (args[0] || "").toLowerCase();
+    if (!sub) {
+      return [
+        ["usage: background <url | filename>", "dim"],
+        ["  background <url>        an image from any page of free background images", "faint"],
+        ["  background <file.jpg>   a local file, in this site's own folder", "faint"],
+        ["  background reset        back to a random default (1.jpg \u2013 5.jpg)", "faint"],
+        ["  background clear        no background image", "faint"]
+      ];
+    }
+    if (sub === "reset") { var before = currentBgValue; resetBackground(false); return [["background reset — showing " + currentBgValue, "dim"]]; }
+    if (sub === "clear" || sub === "off" || sub === "none") { clearBackground(false); return [["background cleared.", "dim"]]; }
+    var value = args.join(" ");
+    if (args.length === 1 && /^[1-5]$/.test(args[0])) value = args[0] + ".jpg";
+    if (setBackground(value, false)) return [["background set: " + value, "dim"]];
+    return [["couldn't set that background — check the URL or filename.", "dim"]];
+  }
+
+  // ---------- background color ----------
+  var BG_COLOR_KEY = "bogdany-bg-hex";
+  var BG_COLOR_DEFAULT = "0d0b07";
+  var BG_COLOR_PRESETS = [
+    ["black", "0d0b07"],
+    ["navy", "0a1128"],
+    ["forest", "0a1f13"],
+    ["maroon", "1f0a10"],
+    ["slate", "13161c"],
+    ["plum", "170a1f"]
+  ];
+  var currentBgHex = BG_COLOR_DEFAULT;
+  var bgswatchesEl = document.getElementById("bgswatches");
+  var bgcolorpicker = document.getElementById("bgcolorpicker");
+  var bgcolorhexEl = document.getElementById("bgcolorhex");
+
+  BG_COLOR_PRESETS.forEach(function (p) {
+    var sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.style.background = "#" + p[1];
+    sw.title = p[0];
+    sw.addEventListener("click", function () { setBgColor(p[1], true); });
+    bgswatchesEl.appendChild(sw);
+  });
+
+  function refreshBgPanel() {
+    bgcolorpicker.value = "#" + currentBgHex;
+    bgcolorhexEl.textContent = "#" + currentBgHex;
+    var sw = bgswatchesEl.children;
+    for (var i = 0; i < sw.length; i++) {
+      sw[i].classList.toggle("active", BG_COLOR_PRESETS[i][1] === currentBgHex);
+    }
+  }
+
+  function setBgColor(hex, announce) {
+    hex = (hex || "").replace("#", "").trim().toLowerCase();
+    if (!/^[0-9a-f]{6}$/.test(hex)) {
+      if (announce) printLine("invalid color — use a 6-digit hex like 101018", "dim");
+      return false;
+    }
+    var r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    var root = document.documentElement.style;
+    root.setProperty("--bg", "#" + hex);
+    root.setProperty("--bg-rgb", r + ", " + g + ", " + b);
+    currentBgHex = hex;
+    if (hasConsent()) setCookie(BG_COLOR_KEY, hex, 365);
+    refreshBgPanel();
+    if (announce) printLine("background color set: #" + hex, "dim");
+    return true;
+  }
+
+  (function initBgColor() {
+    var saved = getCookie(BG_COLOR_KEY);
+    if (saved) setBgColor(saved, false);
+  })();
+  refreshBgPanel();
+
+  bgcolorpicker.addEventListener("input", function () {
+    setBgColor(bgcolorpicker.value.replace("#", ""), false);
+  });
+
+  function bgColorCmd(args) {
+    args = args || [];
+    var sub = (args[0] || "").toLowerCase();
+    if (!sub) {
+      var lines = [["current: #" + currentBgHex, "dim"], ["presets:", "dim"]];
+      BG_COLOR_PRESETS.forEach(function (p) { lines.push(["  " + p[0] + "  #" + p[1], ""]); });
+      lines.push(["", ""]);
+      lines.push(["  bgcolor <preset>      apply a preset", "faint"]);
+      lines.push(["  bgcolor hex 101018    apply a custom hex", "faint"]);
+      lines.push(["  bgcolor reset         back to black", "faint"]);
+      return lines;
+    }
+    if (sub === "reset") { setBgColor(BG_COLOR_DEFAULT, false); return [["background color reset to black.", "dim"]]; }
+    var preset = BG_COLOR_PRESETS.find(function (p) { return p[0] === sub; });
+    if (preset) { setBgColor(preset[1], false); return [["background color set: " + preset[0] + " (#" + preset[1] + ")", "dim"]]; }
+    var hex = sub === "hex" ? args[1] : sub.replace("#", "");
+    if (hex && setBgColor(hex, false)) return [["background color set: #" + hex.toLowerCase(), "dim"]];
+    return [["usage: bgcolor <preset> | bgcolor hex <rrggbb> | bgcolor reset", "dim"]];
+  }
+
+  // ---------- color theme ----------
+  // The actual color engine now lives in theme.js (shared with any other
+  // page that includes it). This section only wires up index.htm's own
+  // on-page color picker panel and delegates the real work.
+  var COLOR_PRESETS = window.BOGDANY_COLOR_PRESETS || [
+    ["amber", "ffb000"],
+    ["green", "33ff66"],
+    ["cyan", "33e0ff"],
+    ["violet", "b266ff"],
+    ["rose", "ff4d8d"],
+    ["white", "e8e8e8"]
+  ];
+  var currentHex = (typeof window.bogdanyCurrentThemeHex === "function") ? window.bogdanyCurrentThemeHex() : "ffb000";
+  var colorpanel = document.getElementById("colorpanel");
+  var swatchesEl = document.getElementById("swatches");
+  var colorpicker = document.getElementById("colorpicker");
+  var colorhexEl = document.getElementById("colorhex");
+
+  COLOR_PRESETS.forEach(function (p) {
+    var sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.style.background = "#" + p[1];
+    sw.title = p[0];
+    sw.addEventListener("click", function () { setTheme(p[1], true); });
+    swatchesEl.appendChild(sw);
+  });
+
+  function refreshPanel() {
+    colorpicker.value = "#" + currentHex;
+    colorhexEl.textContent = "#" + currentHex;
+    var sw = swatchesEl.children;
+    for (var i = 0; i < sw.length; i++) {
+      sw[i].classList.toggle("active", COLOR_PRESETS[i][1] === currentHex);
+    }
+  }
+
+  function setTheme(hex, announce) {
+    hex = (hex || "").replace("#", "").trim().toLowerCase();
+    var applied = typeof window.applyBogdanyTheme === "function" && window.applyBogdanyTheme(hex, true);
+    if (!applied) {
+      if (announce) printLine("invalid color — use a 6-digit hex like ff11dd", "dim");
+      return false;
+    }
+    currentHex = hex;
+    refreshPanel();
+    if (!gamewin.hidden && gameframe.contentWindow) {
+      gameframe.contentWindow.postMessage({ type: "bogdany-theme", hex: hex }, window.location.origin || "null");
+    }
+    if (announce) printLine("theme set: #" + hex, "dim");
+    return true;
+  }
+
+  // theme.js already applied the saved color before this script even ran —
+  // this just brings the on-page panel's state (swatches, hex readout) in
+  // line with it.
+  refreshPanel();
+
+  document.getElementById("btn-color").addEventListener("click", function () {
+    colorpanel.hidden = !colorpanel.hidden;
+  });
+  colorpicker.addEventListener("input", function () {
+    setTheme(colorpicker.value.replace("#", ""), false);
+  });
+
+  function colorCmd(args) {
+    args = args || [];
+    var sub = (args[0] || "").toLowerCase();
+
+    if (!sub) {
+      var lines = [["current: #" + currentHex, "dim"], ["presets:", "dim"]];
+      COLOR_PRESETS.forEach(function (p) { lines.push(["  " + p[0] + "  #" + p[1], ""]); });
+      lines.push(["", ""]);
+      lines.push(["  color <preset>       apply a preset", "faint"]);
+      lines.push(["  color hex ff11dd     apply a custom hex", "faint"]);
+      lines.push(["  color reset          back to amber", "faint"]);
+      return lines;
+    }
+    if (sub === "reset") { setTheme("ffb000", false); return [["theme reset to amber.", "dim"]]; }
+
+    var preset = COLOR_PRESETS.find(function (p) { return p[0] === sub; });
+    if (preset) { setTheme(preset[1], false); return [["theme set: " + preset[0] + " (#" + preset[1] + ")", "dim"]]; }
+
+    var hex = sub === "hex" ? args[1] : sub.replace("#", "");
+    if (hex && setTheme(hex, false)) return [["theme set: #" + hex.toLowerCase(), "dim"]];
+    return [["usage: color <preset> | color hex <rrggbb> | color reset", "dim"]];
+  }
+
+  const commands = {
+    help: function () {
+      return [
+        ["available commands:", "dim"],
+        ["  background             set a background image", ""],
+        ["    background <url>     use an image from the web", "faint"],
+        ["    background <file>    use a local file (same folder as this page)", "faint"],
+        ["    background reset     back to a random default (1.jpg \u2013 5.jpg)", "faint"],
+        ["    background clear     no background image", "faint"],
+        ["  bg                     alias for background", ""],
+        ["  bgcolor                show current background color + presets", ""],
+        ["    bgcolor <preset>     black, navy, forest, maroon, slate, plum", "faint"],
+        ["    bgcolor hex <rrggbb> apply a custom hex color", "faint"],
+        ["    bgcolor reset        back to black", "faint"],
+        ["  bgcolour               alias for bgcolor", ""],
+        ["  blackjack              beat the dealer to 21", ""],
+        ["  chat                   show chat notification-sound status", ""],
+        ["    chat sound on|off    turn the new-message chime on/off", "faint"],
+        ["  chess                  versus the machine", ""],
+        ["  clear                  wipe the screen", ""],
+        ["  clear-history          same as `history clear`", ""],
+        ["  color                  show current theme + presets", ""],
+        ["    color <preset>       amber, green, cyan, violet, rose, white", "faint"],
+        ["    color hex <rrggbb>   apply a custom hex color", "faint"],
+        ["    color reset          back to amber", "faint"],
+        ["  colour                 alias for color", ""],
+        ["  connect4 (c4)          four in a row", ""],
+        ["  cookies                show cookie consent status", ""],
+        ["    cookies accept       allow settings to be remembered", "faint"],
+        ["    cookies decline      stop remembering anything new", "faint"],
+        ["    cookies clear        forget your choice, ask again", "faint"],
+        ["  delete-cookies         wipe every cookie this site has set", ""],
+        ["  exit                   good luck with that", ""],
+        ["  go                     the ancient game", ""],
+        ["  gui                    windows-style command browser", ""],
+        ["  history                list your last 20 commands", ""],
+        ["    history clear        wipe stored command history", "faint"],
+        ["  jeopardy               keep score against each other", ""],
+        ["  mahjong                play a round", ""],
+        ["  mail                   about the mail here", ""],
+        ["  mancala                sow, capture, repeat", ""],
+        ["  motd                   the welcome message again", ""],
+        ["  music                  alias for radio", ""],
+        ["  puzzle                 jigsaw, any picture", ""],
+        ["  radio                  list stations, tune with radio <n>", ""],
+        ["    radio <n>            tune to station number <n>", "faint"],
+        ["    radio <name>         tune by (partial) station name", "faint"],
+        ["    radio search <term>  find stations on radio-browser.info", "faint"],
+        ["    radio vol <0-100>    set volume", "faint"],
+        ["    radio stop           turn it off", "faint"],
+        ["  reversi                flip discs, hold the board", ""],
+        ["  scrabble               fun with words", ""],
+        ["  snake                  eat, grow, don't crash", ""],
+        ["  solitaire              a quieter game", ""],
+        ["  sudoku                 fill the grid", ""],
+        ["  suzen                  difficult to master, yet easy to learn", ""],
+        ["  tetris                 clear the lines", ""],
+        ["  uptime                 how long you've been staring at this", ""],
+        ["  whois <domain>         domain registration lookup", ""],
+        ["    whois               defaults to bogdany.com", "faint"],
+        ["  yahtzee                dice, categories, luck", ""],
+        ["  youtube (yt)           search + watch videos", ""],
+        ["    youtube <query>      search and show results", "faint"],
+        ["    youtube              open the search screen", "faint"]
+      ];
+    },
+    whois: function (args) {
+      var domain = ((args && args[0]) || "bogdany.com")
+        .toLowerCase().replace(/[^a-z0-9.\-]/g, "");
+      if (!domain) return [["usage: whois <domain>", "dim"]];
+      return fetch("https://rdap.org/domain/" + domain)
+        .then(function (res) {
+          if (!res.ok) throw new Error(res.status);
+          return res.json();
+        })
+        .then(function (d) {
+          var lines = [["domain:      " + (d.ldhName || domain).toLowerCase(), ""]];
+          if (d.status && d.status.length)
+            lines.push(["status:      " + d.status.join(", "), "dim"]);
+          (d.events || []).forEach(function (ev) {
+            var date = (ev.eventDate || "").split("T")[0] || "—";
+            if (ev.eventAction === "registration")  lines.push(["registered:  " + date, "dim"]);
+            if (ev.eventAction === "expiration")     lines.push(["expires:     " + date, "dim"]);
+            if (ev.eventAction === "last changed")   lines.push(["updated:     " + date, "dim"]);
+          });
+          (d.entities || []).forEach(function (e) {
+            if ((e.roles || []).indexOf("registrar") === -1) return;
+            var name = "";
+            ((e.vcardArray && e.vcardArray[1]) || []).forEach(function (p) {
+              if (p[0] === "fn") name = p[3];
+            });
+            if (name) lines.push(["registrar:   " + name, "dim"]);
+          });
+          if (d.nameservers && d.nameservers.length) {
+            var ns = d.nameservers.map(function (n) { return (n.ldhName || "").toLowerCase(); });
+            lines.push(["nameservers: " + ns.join(", "), "dim"]);
+          }
+          return lines;
+        })
+        .catch(function () {
+          return [["whois lookup failed — check the domain name", "dim"]];
+        });
+    },
+    mail: function () {
+      return [
+        ["mail services: running.", ""],
+        ["If you have an address here, you already know it.", "dim"]
+      ];
+    },
+    uptime: function () {
+      return [
+        ["session:  " + fmtUptime(), ""],
+        ["domain:   online, as always", "dim"]
+      ];
+    },
+    solitaire: function () {
+      launchGame("solitaire", "solitaire.html");
+      return [["dealing...", "dim"]];
+    },
+    chess: function () {
+      launchGame("chess", "chess.html");
+      return [["waking the machine...", "dim"]];
+    },
+    blackjack: function () {
+      launchGame("blackjack", "blackjack.html");
+      return [["shuffling the shoe...", "dim"]];
+    },
+    background: function (args) { return backgroundCmd(args); },
+    bg: function (args) { return backgroundCmd(args); },
+    bgcolor: function (args) { return bgColorCmd(args); },
+    bgcolour: function (args) { return bgColorCmd(args); },
+    chat: function (args) { return chatCmd(args); },
+    connect4: function () {
+      launchGame("connect4", "connect4.html");
+      return [["stacking discs...", "dim"]];
+    },
+    c4: function () { return commands.connect4(); },
+    go: function () {
+      launchGame("go", "go.html");
+      return [["placing the first stone...", "dim"]];
+    },
+    gui: function () {
+      launchGame("gui", "gui.html");
+      return [["opening command browser...", "dim"]];
+    },
+    yahtzee: function () {
+      launchGame("yahtzee", "yahtzee.html");
+      return [["rattling the dice cup...", "dim"]];
+    },
+    mancala: function () {
+      launchGame("mancala", "mancala.html");
+      return [["setting up the pits...", "dim"]];
+    },
+    reversi: function () {
+      launchGame("reversi", "reversi.html");
+      return [["placing the first four...", "dim"]];
+    },
+    sudoku: function () {
+      launchGame("sudoku", "sudoku.html");
+      return [["generating puzzle...", "dim"]];
+    },
+    jeopardy: function () {
+      launchGame("jeopardy", "jeopardy.html");
+      return [["opening scoreboard...", "dim"]];
+    },
+    snake: function () {
+      launchGame("snake", "snake.html");
+      return [["waking the snake...", "dim"]];
+    },
+    scrabble: function () {
+      launchGame("scrabble", "scrabble.html");
+      return [["fun with words...", "dim"]];
+    },
+    tetris: function () {
+      launchGame("tetris", "tetris.html");
+      return [["stacking blocks...", "dim"]];
+    },
+    puzzle: function () {
+      launchGame("puzzle", "puzzle.html");
+      return [["cutting pieces...", "dim"]];
+    },
+    suzen: function () {
+      launchGame("suzen", "suzen.html");
+      return [["difficult to master, yet easy to learn...", "dim"]];
+    },
+    youtube: function (args) {
+      var q = (args || []).join(" ").trim();
+      var src = "youtube.html" + (q ? "?q=" + encodeURIComponent(q) : "");
+      launchGame("youtube", src);
+      return [[q ? "searching for \u201c" + q + "\u201d..." : "opening youtube...", "dim"]];
+    },
+    yt: function (args) { return commands.youtube(args); },
+    radio: function (args) { return radioCmd(args); },
+    music: function (args) { return radioCmd(args); },
+    color: function (args) { return colorCmd(args); },
+    colour: function (args) { return colorCmd(args); },
+    history: function (args) { return historyCmd(args); },
+    "clear-history": function () { return historyCmd(["clear"]); },
+    cookies: function (args) { return cookiesCmd(args); },
+    "delete-cookies": function () { return deleteCookiesCmd(); },
+    mahjong: function () {
+      launchGame("mahjong", "Mahjong.html");
+      return [["loading mahjong...", "dim"]];
+    },
+    motd: function () { return MOTD; },
+    clear: function () { term.innerHTML = ""; return []; },
+    exit: function () {
+      return [["There's nowhere to go. This is the whole site.", "dim"]];
+    },
+    ls: function () {
+      return [["Nothing to see. It's a placeholder.", "dim"]];
+    },
+    sudo: function () {
+      return [["Nice try.", "dim"]];
+    },
+    whoami: function () {
+      return [[username, ""]];
+    },
+    pwd: function () {
+      return [["/home/guest — and that's as deep as it gets", "dim"]];
+    }
+  };
+
+  // ---------- embedded game window ----------
+  const gamewin = document.getElementById("gamewin");
+  const gameframe = document.getElementById("gameframe");
+  const gametitle = document.getElementById("gametitle");
+
+  function launchGame(name, src) {
+    setTimeout(function () {
+      document.getElementById("gameuser").textContent = username;
+      gametitle.textContent = name;
+      gameframe.src = src;
+      gamewin.hidden = false;
+    }, 900);
+  }
+
+  function closeGame() {
+    gamewin.hidden = true;
+    gameframe.src = "about:blank";
+    printLine("exited " + gametitle.textContent + ".", "dim");
+    if (inputEl) inputEl.focus();
+  }
+
+  document.getElementById("gameclose").addEventListener("click", closeGame);
+
+  // Lets a same-origin embedded page (e.g. gui.html) ask the terminal to run
+  // a command in place, instead of opening a new tab. We only trust messages
+  // coming from the iframe we ourselves loaded.
+  window.addEventListener("message", function (e) {
+    if (!e.source || e.source !== gameframe.contentWindow) return;
+    var data = e.data;
+    if (!data) return;
+
+    if (data.type === "bogdany-close") {
+      if (!gamewin.hidden) closeGame();
+      return;
+    }
+
+    if (data.type === "bogdany-toggle-chat") {
+      if (typeof toggleChat === "function") toggleChat();
+      return;
+    }
+
+    if (data.type !== "bogdany-run") return;
+    var cmd = (data.cmd || "").toString();
+    if (!cmd) return;
+
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.set("run", cmd);
+      history.replaceState(null, "", url.pathname + "?" + url.searchParams.toString() + url.hash);
+    } catch (err) {}
+
+    if (!gamewin.hidden) closeGame();
+    if (inputEl && currentLine && currentLabel && currentCur) {
+      inputEl.value = cmd;
+      inputEl.style.width = inputEl.value.length + "ch";
+      runCommand(inputEl.value, currentLine, currentLabel, currentCur);
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !gamewin.hidden) closeGame();
+  });
+
+  // ---------- command history ----------
+  var HIST_KEY = "bogdany-cmd-history";
+  var MAX_HISTORY = 50; // kept modest so the JSON blob comfortably fits in one cookie
+  var cmdHistory = [];
+  try {
+    var storedHist = JSON.parse(getCookie(HIST_KEY) || "[]");
+    if (Array.isArray(storedHist)) cmdHistory = storedHist;
+  } catch (e) {}
+
+  function saveHistoryCookie() {
+    // cookies top out around 4KB — trim oldest entries until the JSON fits
+    var toSave = cmdHistory.slice();
+    while (toSave.length && JSON.stringify(toSave).length > 3800) toSave.shift();
+    setCookie(HIST_KEY, JSON.stringify(toSave), 365);
+  }
+
+  function saveHistoryEntry(raw) {
+    raw = raw.trim();
+    if (!raw) return;
+    if (cmdHistory[cmdHistory.length - 1] === raw) return; // skip immediate repeats
+    cmdHistory.push(raw);
+    if (cmdHistory.length > MAX_HISTORY) cmdHistory.shift();
+    if (hasConsent()) saveHistoryCookie();
+  }
+
+  function historyCmd(args) {
+    var sub = ((args || [])[0] || "").toLowerCase();
+    if (sub === "clear") {
+      cmdHistory = [];
+      deleteCookie(HIST_KEY);
+      return [["command history cleared.", "dim"]];
+    }
+    if (!cmdHistory.length) return [["no history yet.", "dim"]];
+    var recent = cmdHistory.slice(-20);
+    var start = cmdHistory.length - recent.length + 1;
+    var lines = recent.map(function (c, i) { return ["  " + (start + i) + "  " + c, ""]; });
+    lines.push(["", ""]);
+    lines.push(["\u2191 / \u2193 recall commands at the prompt \u2014 `history clear` wipes this list", "faint"]);
+    return lines;
+  }
+
+  // ---------- interactive prompt ----------
+  let inputEl = null;
+  let currentLine = null, currentLabel = null, currentCur = null;
+  let username = "guest";
+
+  function newPrompt(prefill) {
+    const line = el("div", "prompt-line");
+    const label = el("span", "prompt-label", username + "@bogdany:~$ ");
+    const input = el("input");
+    input.id = "cmd";
+    input.setAttribute("autocomplete", "off");
+    input.setAttribute("autocapitalize", "off");
+    input.setAttribute("spellcheck", "false");
+    input.setAttribute("aria-label", "terminal command input");
+    const ghost = el("span", "faint ghost");
+
+    let tabMatches = null; // full sorted match list while cycling, else null
+    let tabIndex = -1;     // index into tabMatches currently shown as the real value
+
+    function setGhost(text) {
+      ghost.textContent = text || "";
+    }
+
+    function resetTabState() {
+      tabMatches = null;
+      tabIndex = -1;
+      setGhost("");
+    }
+
+    // preserves anything already typed after the command word (e.g. args)
+    function firstWordAndRest(val) {
+      const m = val.match(/^(\S*)(\s.*)?$/);
+      return { word: m ? m[1] : val, rest: (m && m[2]) || "" };
+    }
+
+    function setCompletedWord(word) {
+      const rest = firstWordAndRest(input.value).rest;
+      const newVal = word + rest;
+      input.value = newVal;
+      input.style.width = newVal.length + "ch";
+      input.setSelectionRange(newVal.length, newVal.length);
+    }
+
+    input.addEventListener("input", function () {
+      input.style.width = input.value.length + "ch";
+      resetTabState();
+    });
+    const cur = el("span", "cursor");
+    line.appendChild(label);
+    line.appendChild(input);
+    line.appendChild(cur);
+    line.appendChild(ghost);
+    term.appendChild(line);
+    inputEl = input;
+    currentLine = line;
+    currentLabel = label;
+    currentCur = cur;
+
+    let histPos = cmdHistory.length;
+    let draft = "";
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab") resetTabState();
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        runCommand(input.value, line, label, cur);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!cmdHistory.length) return;
+        if (histPos === cmdHistory.length) draft = input.value;
+        histPos = Math.max(0, histPos - 1);
+        input.value = cmdHistory[histPos];
+        input.style.width = input.value.length + "ch";
+        input.setSelectionRange(input.value.length, input.value.length);
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (histPos >= cmdHistory.length) return;
+        histPos++;
+        input.value = histPos === cmdHistory.length ? draft : cmdHistory[histPos];
+        input.style.width = input.value.length + "ch";
+        input.setSelectionRange(input.value.length, input.value.length);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+
+        // already cycling: advance to the next match in the list
+        if (tabMatches && tabMatches.length > 1) {
+          tabIndex = (tabIndex + 1) % tabMatches.length;
+          setCompletedWord(tabMatches[tabIndex]);
+          setGhost(tabMatches[(tabIndex + 1) % tabMatches.length]);
+          return;
+        }
+
+        const typed = firstWordAndRest(input.value).word.toLowerCase();
+        if (!typed) return;
+        const matches = Object.keys(commands).sort().filter(function (c) {
+          return c.indexOf(typed) === 0;
+        });
+        if (matches.length === 0) return;
+
+        if (matches.length === 1) {
+          setCompletedWord(matches[0]);
+          resetTabState();
+          return;
+        }
+
+        // multiple matches: complete to the first, preview the next in faint
+        tabMatches = matches;
+        tabIndex = 0;
+        setCompletedWord(matches[0]);
+        setGhost(matches[1]);
+      }
+    });
+    if (prefill) {
+      input.value = prefill;
+      input.style.width = input.value.length + "ch";
+      setTimeout(function () {
+        if (inputEl === input) runCommand(input.value, line, label, cur);
+      }, 500);
+    } else {
+      input.focus();
+    }
+    scrollBottom();
+  }
+
+  function runCommand(raw, line, label, cur) {
+    // freeze the old prompt line as plain text
+    line.textContent = label.textContent + raw;
+    cur.remove();
+    inputEl = null;
+    saveHistoryEntry(raw);
+
+    const parts = raw.trim().split(/\s+/).filter(Boolean);
+    const cmd = (parts[0] || "").toLowerCase();
+    if (cmd === "") { newPrompt(); return; }
+
+    const fn = commands[cmd];
+    if (!fn) {
+      printLine("command not found: " + cmd + " — try `help`", "dim");
+      newPrompt();
+      return;
+    }
+    const result = fn(parts.slice(1));
+    if (result && typeof result.then === "function") {
+      result.then(function (lines) {
+        (lines || []).forEach(function (pair) { printLine(pair[0], pair[1]); });
+        newPrompt();
+      }).catch(function () {
+        printLine("something went wrong.", "dim");
+        newPrompt();
+      });
+    } else {
+      (result || []).forEach(function (pair) { printLine(pair[0], pair[1]); });
+      newPrompt();
+    }
+  }
+
+  // any tap or click refocuses the prompt — focus must happen synchronously
+  // inside the gesture, or mobile browsers won't open the keyboard.
+  // Exception: clicks inside the chat panel should keep focus there, or
+  // typing a chat message would get yanked back to the terminal prompt.
+  document.addEventListener("click", function (e) {
+    if (e.target.closest && e.target.closest("#chatPanel")) return;
+    if (inputEl) inputEl.focus({ preventScroll: true });
+  });
+
+  // ---------- boot sequence ----------
+  // logs straight in as "guest" — still typed out on screen so the boot
+  // sequence looks the same, just with nothing to type.
+  function autoLogin() {
+    return typeLine("bogdany.com login: guest", "dim", 28).then(function () {
+      return "guest";
+    });
+  }
+
+  async function boot() {
+    username = await autoLogin();
+    await pause(250);
+    await typeLine("password: ********", "dim", 40);
+    await pause(500);
+    printLine("Last login: " + new Date().toDateString() + " from somewhere.on.the.internet", "faint");
+    await pause(400);
+    printLine("");
+    for (const pair of MOTD) {
+      await typeLine(pair[0], pair[1], 14);
+    }
+    printLine("");
+    var params = new URLSearchParams(location.search);
+    var runParam = params.get("run");
+    newPrompt(runParam || null);
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

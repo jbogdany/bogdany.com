@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+<title>jeopardy score</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(13px, 2vw, 16px);
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  /* ---- header ---- */
+  header {
+    text-align: center;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--amber-faint);
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header h1 {
+    font-size: 1.1em;
+    font-weight: 500;
+    color: var(--amber-dim);
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+
+  /* ---- round tabs ---- */
+  .rounds {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+  }
+  .rounds button {
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font: inherit;
+    font-size: 0.85em;
+    padding: 4px 12px;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .rounds button:hover { color: var(--amber-dim); border-color: var(--amber-dim); }
+  .rounds button.active {
+    color: var(--amber);
+    border-color: var(--amber);
+    text-shadow: 0 0 8px var(--glow);
+  }
+
+  /* ---- player grid ---- */
+  .players {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    border-bottom: 1px solid var(--amber-faint);
+  }
+
+  .player {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 8px 10px;
+    gap: 6px;
+  }
+  .player:first-child {
+    border-right: 1px solid var(--amber-faint);
+  }
+
+  /* editable name */
+  .player-name {
+    font-size: 0.9em;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--amber-dim);
+    text-shadow: 0 0 6px var(--glow);
+    text-align: center;
+    cursor: text;
+    outline: none;
+    border-bottom: 1px solid transparent;
+    min-width: 4ch;
+    max-width: 100%;
+  }
+  .player-name:focus {
+    color: var(--amber);
+    border-bottom-color: var(--amber-dim);
+  }
+  .player-name:empty::before {
+    content: attr(data-placeholder);
+    color: var(--amber-faint);
+  }
+
+  /* score */
+  .player-score {
+    font-size: clamp(1.6em, 5vw, 2.4em);
+    font-weight: 600;
+    text-shadow: 0 0 10px var(--glow);
+    letter-spacing: 0.02em;
+    min-height: 1.2em;
+  }
+  .player-score.negative { color: var(--red); text-shadow: 0 0 10px var(--glow-red); }
+
+  /* denomination buttons */
+  .denoms {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .denom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+
+  .btn-correct, .btn-wrong {
+    font: inherit;
+    font-size: clamp(0.7em, 2vw, 0.85em);
+    font-weight: 500;
+    border: 1px solid;
+    cursor: pointer;
+    padding: 7px 2px;
+    text-align: center;
+    transition: filter 0.1s;
+  }
+  .btn-correct:active, .btn-wrong:active { filter: brightness(1.4); }
+
+  .btn-correct {
+    background: rgba(255, 176, 0, 0.08);
+    border-color: var(--amber-faint);
+    color: var(--amber);
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .btn-correct:hover { background: rgba(255, 176, 0, 0.16); border-color: var(--amber-dim); }
+
+  .btn-wrong {
+    background: rgba(255, 85, 51, 0.07);
+    border-color: rgba(255, 85, 51, 0.3);
+    color: var(--red);
+    text-shadow: 0 0 6px var(--glow-red);
+  }
+  .btn-wrong:hover { background: rgba(255, 85, 51, 0.14); border-color: var(--red); }
+
+  /* ---- Final Jeopardy panel ---- */
+  .final-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .final-panel[hidden] { display: none; }
+
+  .wager-label {
+    font-size: 0.8em;
+    color: var(--amber-faint);
+    text-shadow: 0 0 6px var(--glow);
+  }
+
+  .wager-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--amber-dim);
+    color: var(--amber);
+    font: inherit;
+    font-size: 1.1em;
+    font-weight: 500;
+    text-align: center;
+    width: 80%;
+    outline: none;
+    padding: 2px 0;
+    text-shadow: 0 0 6px var(--glow);
+    caret-color: var(--amber);
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .wager-input::placeholder { color: var(--amber-faint); }
+  /* hide number input spinners */
+  .wager-input::-webkit-inner-spin-button,
+  .wager-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+  .wager-input[type=number] { -moz-appearance: textfield; }
+
+  .final-btns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+  }
+
+  /* ---- footer ---- */
+  footer {
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .last-action {
+    flex: 1;
+    font-size: 0.8em;
+    color: var(--amber-faint);
+    text-shadow: 0 0 6px var(--glow);
+    text-align: center;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ctrl-btn {
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font: inherit;
+    font-size: 0.85em;
+    padding: 5px 12px;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .ctrl-btn:hover { color: var(--amber); border-color: var(--amber-dim); }
+  .ctrl-btn:disabled { opacity: 0.3; pointer-events: none; }
+  .ctrl-btn.danger:hover { color: var(--red); border-color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<header>
+  <h1>guest@bogdany:~$ <span style="color:var(--amber)">jeopardy</span></h1>
+  <div class="rounds" id="rounds">
+    <button class="active" data-r="0">jeopardy</button>
+    <button data-r="1">double</button>
+    <button data-r="2">final</button>
+  </div>
+</header>
+
+<div class="players" id="players">
+  <!-- Player 1 -->
+  <div class="player" id="col-0">
+    <span class="player-name" id="name-0" contenteditable="true" spellcheck="false" data-placeholder="player one"></span>
+    <div class="player-score" id="score-0">$0</div>
+    <div class="denoms" id="denoms-0"></div>
+    <div class="final-panel" id="final-0" hidden>
+      <span class="wager-label">wager</span>
+      <input class="wager-input" id="wager-0" type="number" min="0" placeholder="0">
+      <div class="final-btns">
+        <button class="btn-correct" id="final-correct-0">correct</button>
+        <button class="btn-wrong" id="final-wrong-0">wrong</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Player 2 -->
+  <div class="player" id="col-1">
+    <span class="player-name" id="name-1" contenteditable="true" spellcheck="false" data-placeholder="player two"></span>
+    <div class="player-score" id="score-1">$0</div>
+    <div class="denoms" id="denoms-1"></div>
+    <div class="final-panel" id="final-1" hidden>
+      <span class="wager-label">wager</span>
+      <input class="wager-input" id="wager-1" type="number" min="0" placeholder="0">
+      <div class="final-btns">
+        <button class="btn-correct" id="final-correct-1">correct</button>
+        <button class="btn-wrong" id="final-wrong-1">wrong</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <button class="ctrl-btn" id="btn-undo" disabled>[undo]</button>
+  <span class="last-action" id="last-action">—</span>
+  <button class="ctrl-btn danger" id="btn-reset">[reset]</button>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var DENOMS = [
+    [200, 400, 600, 800, 1000],
+    [400, 800, 1200, 1600, 2000]
+  ];
+
+  var scores = [0, 0];
+  var round = 0;
+  var history = [];
+
+  // ---------- persistence ----------
+  function save() {
+    try {
+      localStorage.setItem("jeopardy-names", JSON.stringify([
+        document.getElementById("name-0").textContent.trim(),
+        document.getElementById("name-1").textContent.trim()
+      ]));
+      localStorage.setItem("jeopardy-scores", JSON.stringify(scores));
+    } catch (e) {}
+  }
+
+  function loadNames() {
+    try {
+      var n = JSON.parse(localStorage.getItem("jeopardy-names") || "null");
+      if (n && n[0]) document.getElementById("name-0").textContent = n[0];
+      if (n && n[1]) document.getElementById("name-1").textContent = n[1];
+    } catch (e) {}
+  }
+
+  // ---------- score formatting ----------
+  function fmt(n) {
+    var neg = n < 0;
+    var s = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return (neg ? "-$" : "$") + s;
+  }
+
+  function playerName(p) {
+    var t = document.getElementById("name-" + p).textContent.trim();
+    return t || (p === 0 ? "player one" : "player two");
+  }
+
+  // ---------- apply score change ----------
+  function adjust(p, delta, label) {
+    scores[p] += delta;
+    history.push({ p: p, delta: delta, label: label });
+    if (history.length > 30) history.shift();
+    updateScores();
+    updateUndo();
+    document.getElementById("last-action").textContent =
+      playerName(p) + " " + (delta >= 0 ? "+" : "") + fmt(delta) + " — " + label;
+    save();
+  }
+
+  function updateScores() {
+    for (var p = 0; p < 2; p++) {
+      var el = document.getElementById("score-" + p);
+      el.textContent = fmt(scores[p]);
+      el.className = "player-score" + (scores[p] < 0 ? " negative" : "");
+    }
+  }
+
+  function updateUndo() {
+    document.getElementById("btn-undo").disabled = history.length === 0;
+  }
+
+  // ---------- undo ----------
+  document.getElementById("btn-undo").addEventListener("click", function () {
+    if (!history.length) return;
+    var last = history.pop();
+    scores[last.p] -= last.delta;
+    updateScores();
+    updateUndo();
+    document.getElementById("last-action").textContent =
+      "undid: " + playerName(last.p) + " " + last.label;
+    save();
+  });
+
+  // ---------- reset ----------
+  document.getElementById("btn-reset").addEventListener("click", function () {
+    if (!confirm("Reset both scores to $0?")) return;
+    scores = [0, 0];
+    history = [];
+    updateScores();
+    updateUndo();
+    document.getElementById("last-action").textContent = "scores reset";
+    save();
+  });
+
+  // ---------- build denomination buttons ----------
+  function buildDenoms(p, denomList) {
+    var container = document.getElementById("denoms-" + p);
+    container.innerHTML = "";
+    denomList.forEach(function (val) {
+      var row = document.createElement("div");
+      row.className = "denom-row";
+
+      var pos = document.createElement("button");
+      pos.className = "btn-correct";
+      pos.textContent = "+" + fmt(val);
+      pos.addEventListener("click", function () { adjust(p, val, fmt(val)); });
+
+      var neg = document.createElement("button");
+      neg.className = "btn-wrong";
+      neg.textContent = "−" + fmt(val);
+      neg.addEventListener("click", function () { adjust(p, -val, "−" + fmt(val)); });
+
+      row.appendChild(pos);
+      row.appendChild(neg);
+      container.appendChild(row);
+    });
+  }
+
+  // ---------- Final Jeopardy wiring ----------
+  for (var _p = 0; _p < 2; _p++) {
+    (function (p) {
+      document.getElementById("final-correct-" + p).addEventListener("click", function () {
+        var w = parseInt(document.getElementById("wager-" + p).value, 10) || 0;
+        if (w <= 0) return;
+        adjust(p, w, "final correct (wager " + fmt(w) + ")");
+      });
+      document.getElementById("final-wrong-" + p).addEventListener("click", function () {
+        var w = parseInt(document.getElementById("wager-" + p).value, 10) || 0;
+        if (w <= 0) return;
+        adjust(p, -w, "final wrong (wager " + fmt(w) + ")");
+      });
+    })(_p);
+  }
+
+  // ---------- round selection ----------
+  function setRound(r) {
+    round = r;
+    document.querySelectorAll(".rounds button").forEach(function (btn) {
+      btn.classList.toggle("active", parseInt(btn.dataset.r) === r);
+    });
+    var isFinal = r === 2;
+    for (var p = 0; p < 2; p++) {
+      document.getElementById("denoms-" + p).hidden = isFinal;
+      document.getElementById("final-" + p).hidden = !isFinal;
+      if (!isFinal && r < 2) {
+        buildDenoms(p, DENOMS[r]);
+      }
+      if (isFinal) {
+        document.getElementById("wager-" + p).value = "";
+      }
+    }
+  }
+
+  document.getElementById("rounds").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-r]");
+    if (btn) setRound(parseInt(btn.dataset.r));
+  });
+
+  // ---------- name persistence on blur ----------
+  [0, 1].forEach(function (p) {
+    var el = document.getElementById("name-" + p);
+    el.addEventListener("blur", save);
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); el.blur(); }
+    });
+  });
+
+  // ---------- init ----------
+  loadNames();
+  setRound(0);
+  updateUndo();
+})();
+</script>
+</body>
+</html>

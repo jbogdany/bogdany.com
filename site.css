@@ -1,0 +1,147 @@
+/*
+ * bogdany.com — shared base stylesheet ("amber CRT terminal" design system)
+ *
+ * Include this after theme.js and before your own <style> block:
+ *
+ *   <script src="theme.js"></script>
+ *   <link rel="stylesheet" href="site.css">
+ *   <style> ...page-specific rules... </style>
+ *
+ * This file covers the pieces nearly every page in the amber family shares:
+ * the color tokens (as CSS custom property *fallbacks* — theme.js overrides
+ * them at runtime from the user's saved color), the CRT scanline/vignette
+ * overlay, the blinking cursor, base typography/reset, and the plain-text
+ * "[button]" style used throughout the site. Page-specific layout (game
+ * boards, score tables, custom widgets) stays in each page's own <style>
+ * block and can freely override anything here — rules here are intentionally
+ * low-specificity so a later same-specificity rule in the page always wins.
+ *
+ * Pages with their own distinct visual identity (yahtzee.html's synthwave
+ * theme, scrabble.html's wood board, gui.html's Windows-95 chrome,
+ * Mahjong.html, suzen.html) don't include this file — that's by design.
+ */
+
+:root {
+  --bg: #0d0b07;
+  --bg-rgb: 13, 11, 7;
+  --amber: #ffb000;
+  --amber-dim: #c07f1a;
+  --amber-faint: #6e5320;
+  --glow: rgba(255, 176, 0, 0.28);
+  --red: #ff5533;
+  --glow-red: rgba(255, 85, 51, 0.3);
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.5vw, 15px);
+  touch-action: manipulation;
+}
+
+::selection { background: var(--amber); color: var(--bg); }
+
+/* ---------- CRT vignette + scanlines ---------- */
+.crt {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.16) 3px
+  );
+}
+.crt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+/* ---------- blinking terminal cursor ---------- */
+.cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  background: var(--amber);
+  vertical-align: text-bottom;
+  box-shadow: 0 0 8px var(--glow);
+  animation: bogdany-blink 1.1s steps(1) infinite;
+}
+@keyframes bogdany-blink { 50% { opacity: 0; } }
+
+/* ---------- text utility classes ---------- */
+.dim { color: var(--amber-dim); }
+.faint { color: var(--amber-faint); }
+
+/* ---------- buttons ("[label]" plain-text style used site-wide) ---------- */
+button {
+  background: transparent;
+  border: none;
+  color: var(--amber-dim);
+  font: inherit;
+  cursor: pointer;
+  text-shadow: 0 0 6px var(--glow);
+  padding: 2px;
+}
+button:hover:not(:disabled), button:focus-visible:not(:disabled) { color: var(--amber); outline: none; }
+button:focus-visible { text-decoration: underline; }
+button:disabled { color: var(--amber-faint); cursor: default; text-shadow: none; }
+
+/* ---------- rules/help modal pattern used by several game pages ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--bg-rgb), 0.94);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.overlay[hidden] { display: none; }
+.overlay .box {
+  max-width: 480px;
+  max-height: 82vh;
+  overflow-y: auto;
+  text-shadow: 0 0 6px var(--glow);
+}
+.overlay h2 { margin-bottom: 12px; letter-spacing: 0.02em; }
+.overlay li {
+  color: var(--amber-dim);
+  margin-bottom: 9px;
+  line-height: 1.55;
+  list-style: none;
+}
+.overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+.overlay .close-row { text-align: center; margin-top: 16px; }
+.overlay button { color: var(--amber); font-size: 1.05em; }
+
+/* ---------- statusbar footer used by every game page ---------- */
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--amber-faint);
+  color: var(--amber-faint);
+  font-size: 0.85em;
+}
+.statusbar a { color: var(--amber-faint); text-decoration: none; }
+.statusbar a:hover { color: var(--amber); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cursor { animation: none; }
+  .crt { display: none; }
+}

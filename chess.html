@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>chess — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+    --sq: min(11.5vw, 58px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 8px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 2px 10px;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header .dim { color: var(--amber-dim); }
+
+  .btns { display: flex; gap: 10px; }
+  button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    padding: 2px;
+  }
+  button:hover, button:focus-visible { color: var(--amber); outline: none; }
+  button:focus-visible { text-decoration: underline; }
+
+  .boardwrap {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+  }
+  .ranks {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    color: var(--amber-faint);
+    font-size: 0.75em;
+    padding-bottom: 0;
+  }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    grid-template-rows: repeat(8, var(--sq));
+    border: 1px solid var(--amber-dim);
+    box-shadow: 0 0 14px rgba(255,176,0,0.12);
+  }
+  .files {
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    justify-content: center;
+    color: var(--amber-faint);
+    font-size: 0.75em;
+    text-align: center;
+    padding: 2px 0 6px;
+    margin-left: calc(0.75em + 4px);
+  }
+
+  .sq {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(var(--sq) * 0.72);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .sq.light { background: rgba(255, 176, 0, 0.13); }
+  .sq.dark  { background: rgba(255, 176, 0, 0.045); }
+
+  .sq .pc { text-shadow: 0 0 7px var(--glow); pointer-events: none; }
+  .sq .pc.w { color: var(--amber); }
+  .sq .pc.b { color: var(--red); text-shadow: 0 0 7px var(--glow-red); }
+
+  .sq.sel { outline: 2px solid var(--amber); outline-offset: -2px; background: rgba(255,176,0,0.22); }
+  .sq.last { outline: 1px dashed var(--amber-dim); outline-offset: -3px; }
+  .sq.check { outline: 2px solid var(--red); outline-offset: -2px; box-shadow: inset 0 0 12px var(--glow-red); }
+
+  .sq.move::after {
+    content: "";
+    position: absolute;
+    width: calc(var(--sq) * 0.22);
+    height: calc(var(--sq) * 0.22);
+    border-radius: 50%;
+    background: var(--amber-dim);
+    box-shadow: 0 0 6px var(--glow);
+  }
+  .sq.take::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: 2px solid var(--red);
+    border-radius: 4px;
+    box-shadow: 0 0 8px var(--glow-red);
+  }
+
+  .status {
+    text-align: center;
+    padding: 10px 0 4px;
+    min-height: 2.2em;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .status .dim { color: var(--amber-dim); }
+  .status .red { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+
+  .log {
+    max-width: calc(var(--sq) * 8 + 2em);
+    margin: 0 auto;
+    height: 7.5em;
+    overflow-y: auto;
+    color: var(--amber-dim);
+    font-size: 0.85em;
+    border-top: 1px solid var(--amber-faint);
+    padding: 6px 2px;
+    scrollbar-width: none;
+  }
+  .log::-webkit-scrollbar { display: none; }
+  .log .n { color: var(--amber-faint); }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 640px;
+    margin: 0 auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.85em;
+  }
+  .statusbar a { color: var(--amber-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--amber); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 11, 7, 0.94);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .overlay h2 {
+    margin-bottom: 12px;
+    letter-spacing: 0.02em;
+  }
+  .overlay li {
+    color: var(--amber-dim);
+    margin-bottom: 9px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+  .overlay .close-row { text-align: center; margin-top: 16px; }
+  .overlay button { color: var(--amber); font-size: 1.05em; }
+
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <span>guest@bogdany:~$ <span class="dim">chess</span></span>
+    <span class="btns">
+      <button id="btn-rules">[rules]</button>
+      <button id="btn-lvl">[lvl: 2]</button>
+      <button id="btn-undo">[undo]</button>
+      <button id="btn-new">[new]</button>
+    </span>
+  </header>
+
+  <div class="boardwrap">
+    <div class="ranks" id="ranks"></div>
+    <div class="board" id="board"></div>
+  </div>
+  <div class="files" id="files"></div>
+
+  <div class="status" id="status"></div>
+  <div class="log" id="log"></div>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.html">bogdany.com</a></span>
+  <span>you play amber</span>
+  <span id="stat-moves">move 1</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>chess &mdash; rules</h2>
+    <ul>
+      <li>Goal: checkmate the opponent's king &mdash; trap it so no move escapes capture.</li>
+      <li>Pawns move forward one square (two on their first move) and capture diagonally. A pawn reaching the far rank promotes &mdash; here it always becomes a queen. En passant is supported.</li>
+      <li>Knights jump in an L-shape and can hop over other pieces.</li>
+      <li>Bishops slide diagonally, rooks slide in straight lines, and the queen combines both.</li>
+      <li>The king moves one square in any direction. It may castle with a rook if neither has moved and the squares between them are empty and unattacked.</li>
+      <li>Check means the king is under attack and must be addressed immediately. Checkmate ends the game. Stalemate &mdash; no legal moves, but not in check &mdash; is a draw.</li>
+    </ul>
+    <div class="close-row"><button id="btn-rules-close">[resume]</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- constants ----------
+  var GLYPH = { K: "\u265A", Q: "\u265B", R: "\u265C", B: "\u265D", N: "\u265E", P: "\u265F" };
+  var VAL = { P: 100, N: 320, B: 330, R: 500, Q: 900, K: 20000 };
+  var FILES = "abcdefgh";
+
+  var PST = {
+    P: [ 0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10,
+         5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5,
+         5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0 ],
+    N: [ -50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,0,0,0,-20,-40, -30,0,10,15,15,10,0,-30,
+         -30,5,15,20,20,15,5,-30, -30,0,15,20,20,15,0,-30, -30,5,10,15,15,10,5,-30,
+         -40,-20,0,5,5,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50 ],
+    B: [ -20,-10,-10,-10,-10,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10,
+         -10,5,5,10,10,5,5,-10, -10,0,10,10,10,10,0,-10, -10,10,10,10,10,10,10,-10,
+         -10,5,0,0,0,0,5,-10, -20,-10,-10,-10,-10,-10,-10,-20 ],
+    R: [ 0,0,0,0,0,0,0,0, 5,10,10,10,10,10,10,5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5,
+         -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 0,0,0,5,5,0,0,0 ],
+    Q: [ -20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,5,5,5,0,-10,
+         -5,0,5,5,5,5,0,-5, 0,0,5,5,5,5,0,-5, -10,5,5,5,5,5,0,-10,
+         -10,0,5,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20 ],
+    K: [ -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30,
+         -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30,
+         -20,-30,-30,-40,-40,-30,-30,-20, -10,-20,-20,-20,-20,-20,-20,-10,
+         20,20,0,0,0,0,20,20, 20,30,10,0,0,10,30,20 ]
+  };
+
+  var KN = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+  var KG = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  var DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
+  var ORTH = [[-1,0],[1,0],[0,-1],[0,1]];
+
+  function idx(r, c) { return r * 8 + c; }
+  function inb(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+  function alg(i) { return FILES[i & 7] + (8 - (i >> 3)); }
+  function other(col) { return col === "w" ? "b" : "w"; }
+
+  // ---------- state ----------
+  var state, snapshots, logMoves, level, gameOver, thinking, selected, legal, lastMove;
+
+  function initialState() {
+    var b = new Array(64).fill(null);
+    var back = ["R","N","B","Q","K","B","N","R"];
+    for (var c = 0; c < 8; c++) {
+      b[idx(0,c)] = "b" + back[c];
+      b[idx(1,c)] = "bP";
+      b[idx(6,c)] = "wP";
+      b[idx(7,c)] = "w" + back[c];
+    }
+    return { b: b, turn: "w", cr: { wK: true, wQ: true, bK: true, bQ: true }, ep: null };
+  }
+
+  // ---------- attack detection ----------
+  function attacked(s, sq, by) {
+    var r = sq >> 3, c = sq & 7, i, tr, tc, t, p;
+    // pawns
+    var pr = r + (by === "w" ? 1 : -1);
+    for (i = -1; i <= 1; i += 2) {
+      if (inb(pr, c + i) && s.b[idx(pr, c + i)] === by + "P") return true;
+    }
+    // knights
+    for (i = 0; i < 8; i++) {
+      tr = r + KN[i][0]; tc = c + KN[i][1];
+      if (inb(tr, tc) && s.b[idx(tr, tc)] === by + "N") return true;
+    }
+    // king
+    for (i = 0; i < 8; i++) {
+      tr = r + KG[i][0]; tc = c + KG[i][1];
+      if (inb(tr, tc) && s.b[idx(tr, tc)] === by + "K") return true;
+    }
+    // sliders
+    for (i = 0; i < 4; i++) {
+      tr = r + DIAG[i][0]; tc = c + DIAG[i][1];
+      while (inb(tr, tc)) {
+        p = s.b[idx(tr, tc)];
+        if (p) { if (p[0] === by && (p[1] === "B" || p[1] === "Q")) return true; break; }
+        tr += DIAG[i][0]; tc += DIAG[i][1];
+      }
+    }
+    for (i = 0; i < 4; i++) {
+      tr = r + ORTH[i][0]; tc = c + ORTH[i][1];
+      while (inb(tr, tc)) {
+        p = s.b[idx(tr, tc)];
+        if (p) { if (p[0] === by && (p[1] === "R" || p[1] === "Q")) return true; break; }
+        tr += ORTH[i][0]; tc += ORTH[i][1];
+      }
+    }
+    return false;
+  }
+
+  function kingSq(s, col) {
+    for (var i = 0; i < 64; i++) if (s.b[i] === col + "K") return i;
+    return -1;
+  }
+
+  function inCheck(s, col) { return attacked(s, kingSq(s, col), other(col)); }
+
+  // ---------- move generation ----------
+  function pseudoMoves(s, col) {
+    var moves = [], i, r, c, p, t, d, tr, tc, ti;
+
+    function push(from, to, extra) {
+      var m = { from: from, to: to };
+      if (extra) for (var k in extra) m[k] = extra[k];
+      m.cap = s.b[to] || (m.ep ? s.b[m.epCap] : null);
+      moves.push(m);
+    }
+
+    function pawnPush(from, to, capFlag) {
+      var toR = to >> 3;
+      if (toR === 0 || toR === 7) push(from, to, { promo: "Q" });
+      else push(from, to);
+    }
+
+    for (i = 0; i < 64; i++) {
+      p = s.b[i];
+      if (!p || p[0] !== col) continue;
+      r = i >> 3; c = i & 7;
+
+      switch (p[1]) {
+        case "P": {
+          var dir = col === "w" ? -1 : 1;
+          var startR = col === "w" ? 6 : 1;
+          if (inb(r + dir, c) && !s.b[idx(r + dir, c)]) {
+            pawnPush(i, idx(r + dir, c));
+            if (r === startR && !s.b[idx(r + 2 * dir, c)]) push(i, idx(r + 2 * dir, c));
+          }
+          for (d = -1; d <= 1; d += 2) {
+            tc = c + d;
+            if (!inb(r + dir, tc)) continue;
+            ti = idx(r + dir, tc);
+            t = s.b[ti];
+            if (t && t[0] !== col) pawnPush(i, ti);
+            else if (ti === s.ep) push(i, ti, { ep: true, epCap: idx(r, tc) });
+          }
+          break;
+        }
+        case "N":
+          for (d = 0; d < 8; d++) {
+            tr = r + KN[d][0]; tc = c + KN[d][1];
+            if (!inb(tr, tc)) continue;
+            t = s.b[idx(tr, tc)];
+            if (!t || t[0] !== col) push(i, idx(tr, tc));
+          }
+          break;
+        case "K":
+          for (d = 0; d < 8; d++) {
+            tr = r + KG[d][0]; tc = c + KG[d][1];
+            if (!inb(tr, tc)) continue;
+            t = s.b[idx(tr, tc)];
+            if (!t || t[0] !== col) push(i, idx(tr, tc));
+          }
+          // castling
+          if (col === "w" && i === 60) {
+            if (s.cr.wK && !s.b[61] && !s.b[62] &&
+                !attacked(s, 60, "b") && !attacked(s, 61, "b") && !attacked(s, 62, "b"))
+              push(60, 62, { castle: "K" });
+            if (s.cr.wQ && !s.b[57] && !s.b[58] && !s.b[59] &&
+                !attacked(s, 60, "b") && !attacked(s, 59, "b") && !attacked(s, 58, "b"))
+              push(60, 58, { castle: "Q" });
+          }
+          if (col === "b" && i === 4) {
+            if (s.cr.bK && !s.b[5] && !s.b[6] &&
+                !attacked(s, 4, "w") && !attacked(s, 5, "w") && !attacked(s, 6, "w"))
+              push(4, 6, { castle: "K" });
+            if (s.cr.bQ && !s.b[1] && !s.b[2] && !s.b[3] &&
+                !attacked(s, 4, "w") && !attacked(s, 3, "w") && !attacked(s, 2, "w"))
+              push(4, 2, { castle: "Q" });
+          }
+          break;
+        default: { // B, R, Q
+          var rays = p[1] === "B" ? DIAG : p[1] === "R" ? ORTH : DIAG.concat(ORTH);
+          for (d = 0; d < rays.length; d++) {
+            tr = r + rays[d][0]; tc = c + rays[d][1];
+            while (inb(tr, tc)) {
+              t = s.b[idx(tr, tc)];
+              if (!t) push(i, idx(tr, tc));
+              else { if (t[0] !== col) push(i, idx(tr, tc)); break; }
+              tr += rays[d][0]; tc += rays[d][1];
+            }
+          }
+        }
+      }
+    }
+    return moves;
+  }
+
+  function apply(s, m) {
+    var b = s.b.slice();
+    var cr = { wK: s.cr.wK, wQ: s.cr.wQ, bK: s.cr.bK, bQ: s.cr.bQ };
+    var ep = null;
+    var p = b[m.from], col = p[0], type = p[1];
+
+    b[m.to] = p;
+    b[m.from] = null;
+    if (m.ep) b[m.epCap] = null;
+    if (m.promo) b[m.to] = col + m.promo;
+    if (m.castle === "K") { b[m.to - 1] = b[m.to + 1]; b[m.to + 1] = null; }
+    if (m.castle === "Q") { b[m.to + 1] = b[m.to - 2]; b[m.to - 2] = null; }
+
+    if (type === "K") { cr[col + "K"] = false; cr[col + "Q"] = false; }
+    if (m.from === 63 || m.to === 63) cr.wK = false;
+    if (m.from === 56 || m.to === 56) cr.wQ = false;
+    if (m.from === 7  || m.to === 7)  cr.bK = false;
+    if (m.from === 0  || m.to === 0)  cr.bQ = false;
+
+    if (type === "P" && Math.abs((m.to >> 3) - (m.from >> 3)) === 2)
+      ep = (m.from + m.to) / 2;
+
+    return { b: b, turn: other(col), cr: cr, ep: ep };
+  }
+
+  function legalMoves(s) {
+    var col = s.turn;
+    return pseudoMoves(s, col).filter(function (m) {
+      return !inCheck(apply(s, m), col);
+    });
+  }
+
+  // ---------- engine ----------
+  function evaluate(s) { // from white's perspective
+    var score = 0, i, p, v;
+    for (i = 0; i < 64; i++) {
+      p = s.b[i];
+      if (!p) continue;
+      v = VAL[p[1]] + PST[p[1]][p[0] === "w" ? i : i ^ 56];
+      score += p[0] === "w" ? v : -v;
+    }
+    return score;
+  }
+
+  function orderMoves(moves) {
+    moves.sort(function (a, b) {
+      var av = a.cap ? VAL[a.cap[1]] : 0;
+      var bv = b.cap ? VAL[b.cap[1]] : 0;
+      return bv - av;
+    });
+    return moves;
+  }
+
+  function negamax(s, depth, alpha, beta) {
+    if (depth === 0) return (s.turn === "w" ? 1 : -1) * evaluate(s);
+    var moves = legalMoves(s);
+    if (!moves.length) return inCheck(s, s.turn) ? -(100000 + depth) : 0;
+    orderMoves(moves);
+    var best = -Infinity, i, sc;
+    for (i = 0; i < moves.length; i++) {
+      sc = -negamax(apply(s, moves[i]), depth - 1, -beta, -alpha);
+      if (sc > best) best = sc;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function bestMove(s, depth, jitter) {
+    var moves = orderMoves(legalMoves(s));
+    if (!moves.length) return null;
+    var best = null, bestScore = -Infinity, alpha = -Infinity, i, sc;
+    for (i = 0; i < moves.length; i++) {
+      sc = -negamax(apply(s, moves[i]), depth - 1, -Infinity, -alpha);
+      if (jitter) sc += Math.random() * 40 - 20;
+      if (sc > bestScore) { bestScore = sc; best = moves[i]; }
+      if (sc > alpha) alpha = sc;
+    }
+    return best;
+  }
+
+  // ---------- notation ----------
+  function notate(s, m, after) {
+    if (m.castle === "K") return "O-O" + suffix(after);
+    if (m.castle === "Q") return "O-O-O" + suffix(after);
+    var p = s.b[m.from];
+    var str = (p[1] === "P" ? "" : p[1]) + alg(m.from) + (m.cap ? "x" : "-") + alg(m.to);
+    if (m.promo) str += "=" + m.promo;
+    if (m.ep) str += " e.p.";
+    return str + suffix(after);
+  }
+  function suffix(after) {
+    if (!after) return "";
+    if (!legalMoves(after).length) return inCheck(after, after.turn) ? "#" : "";
+    return inCheck(after, after.turn) ? "+" : "";
+  }
+
+  // ---------- UI ----------
+  var boardEl = document.getElementById("board");
+  var statusEl = document.getElementById("status");
+  var logEl = document.getElementById("log");
+  var statMoves = document.getElementById("stat-moves");
+  var btnLvl = document.getElementById("btn-lvl");
+
+  // coordinates
+  (function () {
+    var ranks = document.getElementById("ranks");
+    var files = document.getElementById("files");
+    for (var r = 8; r >= 1; r--) {
+      var d = document.createElement("div");
+      d.textContent = r;
+      ranks.appendChild(d);
+    }
+    for (var f = 0; f < 8; f++) {
+      var d2 = document.createElement("div");
+      d2.textContent = FILES[f];
+      files.appendChild(d2);
+    }
+  })();
+
+  function newGame() {
+    state = initialState();
+    snapshots = [];
+    logMoves = [];
+    gameOver = false;
+    thinking = false;
+    selected = null;
+    legal = [];
+    lastMove = null;
+    setStatus("your move", "");
+    render();
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    if (!gameOver) {
+      statusEl.appendChild(document.createTextNode(" "));
+      var cur = document.createElement("span");
+      cur.className = "cursor";
+      statusEl.appendChild(cur);
+    }
+  }
+
+  function render() {
+    boardEl.innerHTML = "";
+    var checkedSq = -1;
+    if (inCheck(state, state.turn)) checkedSq = kingSq(state, state.turn);
+
+    for (var i = 0; i < 64; i++) {
+      (function (i) {
+        var r = i >> 3, c = i & 7;
+        var sq = document.createElement("div");
+        sq.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
+        var p = state.b[i];
+        if (p) {
+          var pc = document.createElement("span");
+          pc.className = "pc " + p[0];
+          pc.textContent = GLYPH[p[1]];
+          sq.appendChild(pc);
+        }
+        if (selected === i) sq.classList.add("sel");
+        if (lastMove && (lastMove.from === i || lastMove.to === i)) sq.classList.add("last");
+        if (checkedSq === i) sq.classList.add("check");
+        for (var k = 0; k < legal.length; k++) {
+          if (legal[k].to === i) { sq.classList.add(legal[k].cap ? "take" : "move"); break; }
+        }
+        sq.addEventListener("click", function () { onSquare(i); });
+        boardEl.appendChild(sq);
+      })(i);
+    }
+    statMoves.textContent = "move " + (Math.floor(logMoves.length / 2) + 1);
+    renderLog();
+  }
+
+  function renderLog() {
+    logEl.innerHTML = "";
+    for (var i = 0; i < logMoves.length; i += 2) {
+      var line = document.createElement("div");
+      var n = document.createElement("span");
+      n.className = "n";
+      n.textContent = (i / 2 + 1) + ". ";
+      line.appendChild(n);
+      line.appendChild(document.createTextNode(
+        logMoves[i] + (logMoves[i + 1] ? "  " + logMoves[i + 1] : "")
+      ));
+      logEl.appendChild(line);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function onSquare(i) {
+    if (gameOver || thinking || state.turn !== "w") return;
+
+    // try to move to a highlighted square
+    if (selected !== null) {
+      for (var k = 0; k < legal.length; k++) {
+        if (legal[k].to === i) { playerMove(legal[k]); return; }
+      }
+    }
+    // (re)select own piece
+    var p = state.b[i];
+    if (p && p[0] === "w" && i !== selected) {
+      selected = i;
+      legal = legalMoves(state).filter(function (m) { return m.from === i; });
+    } else {
+      selected = null;
+      legal = [];
+    }
+    render();
+  }
+
+  function playerMove(m) {
+    snapshots.push({
+      state: { b: state.b.slice(), turn: state.turn,
+               cr: { wK: state.cr.wK, wQ: state.cr.wQ, bK: state.cr.bK, bQ: state.cr.bQ },
+               ep: state.ep },
+      log: logMoves.slice(),
+      last: lastMove
+    });
+    var after = apply(state, m);
+    logMoves.push(notate(state, m, after));
+    state = after;
+    lastMove = m;
+    selected = null;
+    legal = [];
+    render();
+    if (checkEnd()) return;
+    aiTurn();
+  }
+
+  function aiTurn() {
+    thinking = true;
+    setStatus("thinking...", "dim");
+    setTimeout(function () {
+      var depth = level;
+      var m = bestMove(state, depth, level === 1);
+      if (m) {
+        var after = apply(state, m);
+        logMoves.push(notate(state, m, after));
+        state = after;
+        lastMove = m;
+      }
+      thinking = false;
+      render();
+      if (!checkEnd()) {
+        setStatus(inCheck(state, "w") ? "check — your move" : "your move",
+                  inCheck(state, "w") ? "red" : "");
+      }
+    }, 120);
+  }
+
+  function checkEnd() {
+    var moves = legalMoves(state);
+    if (moves.length) return false;
+    gameOver = true;
+    if (inCheck(state, state.turn)) {
+      if (state.turn === "b") setStatus("checkmate — you win", "");
+      else setStatus("checkmate — machine wins", "red");
+    } else {
+      setStatus("stalemate — draw", "dim");
+    }
+    render();
+    return true;
+  }
+
+  function undo() {
+    if (!snapshots.length || thinking) return;
+    var snap = snapshots.pop();
+    state = snap.state;
+    logMoves = snap.log;
+    lastMove = snap.last;
+    gameOver = false;
+    selected = null;
+    legal = [];
+    setStatus("your move", "");
+    render();
+  }
+
+  // ---------- controls ----------
+  level = 2;
+  document.getElementById("btn-new").addEventListener("click", newGame);
+  document.getElementById("btn-undo").addEventListener("click", undo);
+  btnLvl.addEventListener("click", function () {
+    level = level % 3 + 1;
+    btnLvl.textContent = "[lvl: " + level + "]";
+  });
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  function openRules() { rulesOverlay.hidden = false; }
+  function closeRules() { rulesOverlay.hidden = true; }
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-rules-close").addEventListener("click", closeRules);
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) closeRules(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) closeRules();
+  });
+
+  newGame();
+
+  // when embedded in the terminal, the back-link is redundant — disable it
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

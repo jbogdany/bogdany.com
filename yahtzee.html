@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="chat-shortcut.js"></script>
+<title>yahtzee — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #120821;
+    --bg-mid: #1c0e38;
+    --grid-line: rgba(255, 46, 154, 0.28);
+    --pink: #ff2e9a;
+    --pink-glow: rgba(255, 46, 154, 0.55);
+    --cyan: #05eaff;
+    --cyan-glow: rgba(5, 234, 255, 0.5);
+    --purple: #9b5de5;
+    --yellow: #ffd23f;
+    --orange: #ff6b35;
+    --orange-glow: rgba(255, 107, 53, 0.5);
+    --text: #f3ecff;
+    --text-dim: #c3aef0;
+    --text-faint: #6b4f92;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body { height: 100%; }
+
+  body {
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(155, 93, 229, 0.25), transparent 60%),
+      linear-gradient(180deg, var(--bg-deep) 0%, var(--bg-mid) 55%, var(--bg-deep) 100%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: "Share Tech Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 10px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  ::selection { background: var(--pink); color: var(--bg-deep); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.16) 3px
+    );
+  }
+
+  .gridfloor {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    height: 42vh;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 46px 46px;
+    transform: perspective(280px) rotateX(62deg);
+    transform-origin: bottom;
+    opacity: 0.6;
+    z-index: 0;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(to top, black, transparent);
+    mask-image: linear-gradient(to top, black, transparent);
+  }
+
+  .sunwrap {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    padding-top: 6px;
+    z-index: 1;
+  }
+  .sun {
+    width: 130px;
+    height: 130px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--yellow) 0%, var(--pink) 55%, var(--purple) 100%);
+    box-shadow: 0 0 50px 8px rgba(255, 107, 157, 0.35);
+    position: relative;
+    overflow: hidden;
+  }
+  .sun::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 46%; bottom: 0;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0 6px,
+      var(--bg-mid) 6px 10px
+    );
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; position: relative; z-index: 1; }
+
+  header { padding: 6px 2px 4px; text-align: center; }
+  .breadcrumb {
+    color: var(--text-faint);
+    font-size: 0.82em;
+    letter-spacing: 0.02em;
+  }
+  .breadcrumb .dim { color: var(--cyan); }
+
+  h1.title {
+    font-family: "Orbitron", sans-serif;
+    font-weight: 900;
+    font-size: clamp(28px, 8vw, 48px);
+    letter-spacing: 0.09em;
+    margin: 2px 0 8px;
+    background: linear-gradient(180deg, #ffffff 0%, var(--pink) 55%, var(--cyan) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 18px var(--pink-glow), 0 0 34px var(--cyan-glow);
+  }
+
+  .btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; padding-bottom: 8px; }
+
+  button.arcade {
+    font-family: "Orbitron", sans-serif;
+    font-weight: 700;
+    font-size: 0.72em;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(0,0,0,0.3));
+    border: 2px solid var(--cyan);
+    color: var(--cyan);
+    padding: 9px 16px;
+    border-radius: 7px;
+    cursor: pointer;
+    box-shadow: 0 0 10px var(--cyan-glow), inset 0 0 8px rgba(5,234,255,0.15);
+    transition: transform 0.08s ease, box-shadow 0.15s ease, color 0.15s ease;
+  }
+  button.arcade:hover:not(:disabled), button.arcade:focus-visible:not(:disabled) {
+    color: #fff;
+    box-shadow: 0 0 16px var(--cyan-glow), 0 0 28px var(--cyan-glow), inset 0 0 10px rgba(5,234,255,0.25);
+    outline: none;
+  }
+  button.arcade:active:not(:disabled) { transform: translateY(1px) scale(0.98); }
+  button.arcade:disabled {
+    opacity: 0.35;
+    cursor: default;
+    box-shadow: none;
+    border-color: var(--text-faint);
+    color: var(--text-faint);
+  }
+  button.arcade.pink {
+    border-color: var(--pink);
+    color: var(--pink);
+    box-shadow: 0 0 10px var(--pink-glow), inset 0 0 8px rgba(255,46,154,0.15);
+  }
+  button.arcade.pink:hover:not(:disabled), button.arcade.pink:focus-visible:not(:disabled) {
+    box-shadow: 0 0 16px var(--pink-glow), 0 0 28px var(--pink-glow), inset 0 0 10px rgba(255,46,154,0.25);
+  }
+
+  .dicearea { text-align: center; padding: 4px 0 2px; }
+  .dicelabel {
+    color: var(--text-faint);
+    font-size: 0.72em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .dice { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+
+  .die { width: 58px; height: 58px; cursor: pointer; }
+  .die svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .die.held { transform: translateY(-4px); }
+
+  .mdice .die { width: 34px; height: 34px; cursor: default; }
+  .mdice { margin-bottom: 4px; }
+
+  .die-face.pink { filter: drop-shadow(0 0 6px var(--pink-glow)); }
+  .die-face.cyan { filter: drop-shadow(0 0 7px var(--cyan-glow)); }
+  .die-face.orange { filter: drop-shadow(0 0 6px var(--orange-glow)); }
+  .die-face.blank { opacity: 0.4; }
+
+  @keyframes diceTumble {
+    0%   { transform: rotate(0deg) scale(1); }
+    25%  { transform: rotate(-18deg) scale(1.1); }
+    50%  { transform: rotate(14deg) scale(1.05); }
+    75%  { transform: rotate(-8deg) scale(1.02); }
+    100% { transform: rotate(0deg) scale(1); }
+  }
+  .die-face.rolling { animation: diceTumble 0.4s ease; }
+  @media (prefers-reduced-motion: reduce) { .die-face.rolling { animation: none; } }
+
+  .rollrow { text-align: center; padding-bottom: 10px; }
+
+  .status {
+    text-align: center;
+    padding: 6px 0 10px;
+    min-height: 2.2em;
+    color: var(--text-dim);
+    text-shadow: 0 0 6px var(--cyan-glow);
+  }
+  .status .dim { color: var(--text-faint); text-shadow: none; }
+  .status .orange { color: var(--orange); text-shadow: 0 0 6px var(--orange-glow); }
+  .status .pink { color: var(--pink); text-shadow: 0 0 6px var(--pink-glow); }
+
+  table.score {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92em;
+  }
+  table.score td, table.score th {
+    padding: 5px 7px;
+    text-align: right;
+    border-bottom: 1px solid rgba(155, 93, 229, 0.22);
+  }
+  table.score th {
+    color: var(--text-faint);
+    text-align: right;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.85em;
+    border-bottom: 2px solid var(--purple);
+  }
+  table.score td.cat { text-align: left; color: var(--text-dim); }
+  table.score tr.grp td.cat {
+    color: var(--purple);
+    font-size: 0.82em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding-top: 14px;
+    border-bottom: none;
+  }
+  table.score td.you, table.score td.mach { min-width: 46px; }
+  table.score td.filled { color: var(--pink); text-shadow: 0 0 5px var(--pink-glow); font-weight: 700; }
+  table.score td.mfilled { color: var(--orange); text-shadow: 0 0 5px var(--orange-glow); font-weight: 700; }
+  table.score td.pick { cursor: pointer; color: var(--cyan); }
+  table.score td.pick:hover { text-shadow: 0 0 8px var(--cyan-glow); color: #fff; }
+  table.score tr.total td {
+    border-top: 2px solid var(--pink);
+    border-bottom: none;
+    color: var(--text);
+    font-weight: 700;
+    padding-top: 8px;
+  }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 640px;
+    margin: 14px auto 0;
+    padding-top: 10px;
+    border-top: 1px solid rgba(155, 93, 229, 0.35);
+    color: var(--text-faint);
+    font-size: 0.85em;
+    position: relative;
+    z-index: 1;
+  }
+  .statusbar a { color: var(--text-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--cyan); }
+  .statusbar .pink-tag { color: var(--pink); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--cyan);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--cyan-glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 5, 20, 0.92);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    background: linear-gradient(180deg, rgba(28, 14, 56, 0.9), rgba(18, 8, 33, 0.95));
+    border: 2px solid var(--pink);
+    border-radius: 10px;
+    box-shadow: 0 0 24px var(--pink-glow), 0 0 48px rgba(5,234,255,0.15);
+    padding: 22px 24px;
+  }
+  .overlay h2 {
+    font-family: "Orbitron", sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-bottom: 14px;
+    color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan-glow);
+    text-transform: uppercase;
+    font-size: 1.1em;
+  }
+  .overlay li {
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\25B8  "; color: var(--pink); }
+  .overlay .close-row { text-align: center; margin-top: 18px; }
+  .overlay button.arcade { font-size: 0.8em; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .crt, .gridfloor { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+<div class="gridfloor" aria-hidden="true"></div>
+
+<!-- shared SVG defs used by every die -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="dieFaceGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#33205c"/>
+      <stop offset="100%" stop-color="#150a2b"/>
+    </linearGradient>
+    <radialGradient id="pip-pink" cx="35%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#ffe0f2"/>
+      <stop offset="45%" stop-color="#ff2e9a"/>
+      <stop offset="100%" stop-color="#a3005a"/>
+    </radialGradient>
+    <radialGradient id="pip-cyan" cx="35%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#e3feff"/>
+      <stop offset="45%" stop-color="#05eaff"/>
+      <stop offset="100%" stop-color="#00808f"/>
+    </radialGradient>
+    <radialGradient id="pip-orange" cx="35%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#ffedcf"/>
+      <stop offset="45%" stop-color="#ff6b35"/>
+      <stop offset="100%" stop-color="#a83c00"/>
+    </radialGradient>
+  </defs>
+</svg>
+
+<div class="sunwrap" aria-hidden="true"><div class="sun"></div></div>
+
+<div class="wrap">
+  <header>
+    <div class="breadcrumb">guest@bogdany:~$ <span class="dim">yahtzee</span></div>
+    <h1 class="title">YAHTZEE</h1>
+    <div class="btns">
+      <button class="arcade" id="btn-rules">Rules</button>
+      <button class="arcade" id="btn-new">New Game</button>
+    </div>
+  </header>
+
+  <div class="dicearea">
+    <div class="dicelabel">your dice</div>
+    <div class="dice" id="dice"></div>
+    <div class="rollrow">
+      <button class="arcade pink" id="btn-roll">Roll</button>
+    </div>
+    <div class="dicelabel">machine's last roll</div>
+    <div class="dice mdice" id="mdice"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <table class="score" id="scoretable">
+    <thead>
+      <tr><th class="cat" style="text-align:left;">category</th><th>you</th><th>machine</th></tr>
+    </thead>
+    <tbody id="scorebody"></tbody>
+  </table>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.htm">bogdany.com</a></span>
+  <span id="stat-round">round 1 / 13</span>
+  <span class="pink-tag">you play pink</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>Yahtzee — Rules</h2>
+    <ul>
+      <li>Each turn you roll five dice, then may re-roll any of them up to two more times (three rolls total), setting aside — "holding" — the dice you want to keep between rolls.</li>
+      <li>After your final roll, place the result into one open category on your scorecard. Every category can only be used once per game, and if nothing fits you can still lock in a category for zero.</li>
+      <li>Upper section (ones through sixes): score the sum of just that number's dice. Filling all six with a combined total of 63 or more earns a 35-point bonus.</li>
+      <li>Three/Four of a Kind: score the sum of all five dice if at least three (or four) show the same value.</li>
+      <li>Full House: three of one value and two of another — 25 points.</li>
+      <li>Small Straight (four in a row): 30 points. Large Straight (five in a row): 40 points.</li>
+      <li>Yahtzee (all five dice matching): 50 points. Rolling a second one after your Yahtzee box is already filled earns a 100-point bonus, and that roll can still be placed in any open category.</li>
+      <li>Chance: score the sum of all five dice, no pattern required — a safe fallback for an unlucky roll.</li>
+      <li>The game ends when both scorecards are full. Highest grand total wins.</li>
+    </ul>
+    <div class="close-row"><button class="arcade" id="btn-rules-close">Resume</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- SVG dice ----------
+  var PIP_LAYOUT = {
+    1: [[30, 30]],
+    2: [[18, 18], [42, 42]],
+    3: [[18, 18], [30, 30], [42, 42]],
+    4: [[18, 18], [42, 18], [18, 42], [42, 42]],
+    5: [[18, 18], [42, 18], [30, 30], [18, 42], [42, 42]],
+    6: [[18, 15], [42, 15], [18, 30], [42, 30], [18, 45], [42, 45]]
+  };
+
+  function dieMarkup(value, scheme, rolling) {
+    if (!value) {
+      return '<svg viewBox="0 0 60 60" class="die-face blank">' +
+        '<rect x="4" y="4" width="52" height="52" rx="11" fill="none" ' +
+        'style="stroke:var(--text-faint);stroke-width:2" stroke-dasharray="6 5"/></svg>';
+    }
+    var pips = PIP_LAYOUT[value] || [];
+    var strokeVar = scheme === "cyan" ? "var(--cyan)" : scheme === "orange" ? "var(--orange)" : "var(--pink)";
+    var pipFill = "url(#pip-" + scheme + ")";
+    var pipMarkup = pips.map(function (p) {
+      return '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="5.4" fill="' + pipFill + '"/>';
+    }).join("");
+    var cls = "die-face " + scheme + (rolling ? " rolling" : "");
+    return '<svg viewBox="0 0 60 60" class="' + cls + '">' +
+      '<rect x="4" y="4" width="52" height="52" rx="11" fill="url(#dieFaceGrad)" ' +
+      'style="stroke:' + strokeVar + ';stroke-width:3"/>' +
+      '<path d="M11 9 L26 9 L13 23 L9 23 Z" fill="rgba(255,255,255,0.10)"/>' +
+      pipMarkup +
+      "</svg>";
+  }
+
+  var UPPER = [
+    ["ones", "Ones"], ["twos", "Twos"], ["threes", "Threes"],
+    ["fours", "Fours"], ["fives", "Fives"], ["sixes", "Sixes"]
+  ];
+  var LOWER = [
+    ["3kind", "Three of a Kind"], ["4kind", "Four of a Kind"], ["fullhouse", "Full House"],
+    ["smallstraight", "Small Straight"], ["largestraight", "Large Straight"],
+    ["yahtzee", "Yahtzee"], ["chance", "Chance"]
+  ];
+  var ALL_CATS = UPPER.concat(LOWER).map(function (c) { return c[0]; });
+  var UPPER_KEYS = UPPER.map(function (c) { return c[0]; });
+
+  function counts(dice) {
+    var c = [0, 0, 0, 0, 0, 0, 0];
+    for (var i = 0; i < dice.length; i++) c[dice[i]]++;
+    return c;
+  }
+
+  function isFullHouse(c) {
+    var vals = c.slice(1).filter(function (n) { return n > 0; }).sort();
+    return vals.length === 2 && vals[0] === 2 && vals[1] === 3;
+  }
+  function isSmallStraight(c) {
+    var runs = [[1,2,3,4],[2,3,4,5],[3,4,5,6]];
+    return runs.some(function (r) { return r.every(function (v) { return c[v] > 0; }); });
+  }
+  function isLargeStraight(c) {
+    var a = "" + (c[1]>0?1:0)+(c[2]>0?1:0)+(c[3]>0?1:0)+(c[4]>0?1:0)+(c[5]>0?1:0)+(c[6]>0?1:0);
+    return a === "111110" || a === "011111";
+  }
+
+  function scoreCategory(cat, dice) {
+    var c = counts(dice);
+    var sum = dice.reduce(function (a, b) { return a + b; }, 0);
+    switch (cat) {
+      case "ones": return c[1] * 1;
+      case "twos": return c[2] * 2;
+      case "threes": return c[3] * 3;
+      case "fours": return c[4] * 4;
+      case "fives": return c[5] * 5;
+      case "sixes": return c[6] * 6;
+      case "3kind": return c.slice(1).some(function (n) { return n >= 3; }) ? sum : 0;
+      case "4kind": return c.slice(1).some(function (n) { return n >= 4; }) ? sum : 0;
+      case "fullhouse": return isFullHouse(c) ? 25 : 0;
+      case "smallstraight": return isSmallStraight(c) ? 30 : 0;
+      case "largestraight": return isLargeStraight(c) ? 40 : 0;
+      case "yahtzee": return c.slice(1).some(function (n) { return n === 5; }) ? 50 : 0;
+      case "chance": return sum;
+    }
+    return 0;
+  }
+
+  function isYahtzeeRoll(dice) {
+    return counts(dice).slice(1).some(function (n) { return n === 5; });
+  }
+
+  function rollDie() { return 1 + Math.floor(Math.random() * 6); }
+
+  // ---------- machine AI ----------
+  function chooseHolds(dice, openCats) {
+    var c = counts(dice);
+    var hold = [false, false, false, false, false];
+    var best = 0, bestVal = 0;
+    for (var v = 1; v <= 6; v++) if (c[v] > best) { best = c[v]; bestVal = v; }
+
+    if (best >= 3) {
+      for (var i = 0; i < 5; i++) if (dice[i] === bestVal) hold[i] = true;
+      if (best === 3 && openCats.indexOf("fullhouse") !== -1) {
+        for (var v2 = 1; v2 <= 6; v2++) {
+          if (v2 !== bestVal && c[v2] === 2) {
+            for (var j = 0; j < 5; j++) if (dice[j] === v2) hold[j] = true;
+          }
+        }
+      }
+      return hold;
+    }
+
+    if (openCats.indexOf("largestraight") !== -1 || openCats.indexOf("smallstraight") !== -1) {
+      var have = [];
+      for (var v3 = 1; v3 <= 6; v3++) if (c[v3] > 0) have.push(v3);
+      var bestRun = [];
+      for (var s = 0; s < have.length; s++) {
+        var run = [have[s]];
+        for (var k = s + 1; k < have.length; k++) {
+          if (have[k] === run[run.length - 1] + 1) run.push(have[k]); else break;
+        }
+        if (run.length > bestRun.length) bestRun = run;
+      }
+      if (bestRun.length >= 3) {
+        var used = {};
+        for (var d = 0; d < 5; d++) {
+          if (bestRun.indexOf(dice[d]) !== -1 && !used[dice[d]]) { hold[d] = true; used[dice[d]] = true; }
+        }
+        return hold;
+      }
+    }
+
+    for (var e = 0; e < 5; e++) if (dice[e] >= 5) hold[e] = true;
+    return hold;
+  }
+
+  function chooseCategory(dice, openCats) {
+    var scored = openCats.map(function (cat) { return { cat: cat, sc: scoreCategory(cat, dice) }; });
+    scored.sort(function (a, b) { return b.sc - a.sc; });
+    var top = scored[0];
+    if (top.sc > 0) return top.cat;
+    var order = ["yahtzee", "largestraight", "smallstraight", "fullhouse", "4kind", "3kind",
+                 "sixes", "fives", "fours", "threes", "twos", "ones", "chance"];
+    for (var i = 0; i < order.length; i++) if (openCats.indexOf(order[i]) !== -1) return order[i];
+    return openCats[0];
+  }
+
+  // ---------- state ----------
+  var player, machine, dice, held, rollsUsed, turn, gameOver, thinking, mDiceShown;
+  var pendingPlayerAnim = null, pendingMachineAnim = null;
+
+  function newPlayerState() {
+    var s = { scores: {}, extra: 0 };
+    ALL_CATS.forEach(function (c) { s.scores[c] = null; });
+    return s;
+  }
+
+  function openCategories(state) {
+    return ALL_CATS.filter(function (c) { return state.scores[c] === null; });
+  }
+
+  function upperSubtotal(state) {
+    var t = 0;
+    UPPER_KEYS.forEach(function (c) { if (state.scores[c] !== null) t += state.scores[c]; });
+    return t;
+  }
+  function lowerSubtotal(state) {
+    var t = 0;
+    LOWER.forEach(function (c) { if (state.scores[c[0]] !== null) t += state.scores[c[0]]; });
+    return t;
+  }
+  function grandTotal(state) {
+    var up = upperSubtotal(state);
+    var bonus = up >= 63 ? 35 : 0;
+    return up + bonus + lowerSubtotal(state) + state.extra * 100;
+  }
+
+  // ---------- UI ----------
+  var diceEl = document.getElementById("dice");
+  var mdiceEl = document.getElementById("mdice");
+  var statusEl = document.getElementById("status");
+  var rollBtn = document.getElementById("btn-roll");
+  var statRound = document.getElementById("stat-round");
+  var scorebody = document.getElementById("scorebody");
+
+  function newGame() {
+    player = newPlayerState();
+    machine = newPlayerState();
+    dice = [0, 0, 0, 0, 0];
+    held = [false, false, false, false, false];
+    rollsUsed = 0;
+    turn = "p";
+    gameOver = false;
+    thinking = false;
+    mDiceShown = null;
+    pendingPlayerAnim = null;
+    pendingMachineAnim = null;
+    setStatus("your turn — roll the dice", "");
+    render();
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    if (!gameOver) {
+      statusEl.appendChild(document.createTextNode(" "));
+      var cur = document.createElement("span");
+      cur.className = "cursor";
+      statusEl.appendChild(cur);
+    }
+  }
+
+  function renderDiceRow(el, values, holdArr, clickable, isMachine, rollAnimIdx) {
+    el.innerHTML = "";
+    for (var i = 0; i < 5; i++) {
+      var d = document.createElement("div");
+      var v = values[i];
+      var isHeld = !!(holdArr && holdArr[i]);
+      var scheme = isMachine ? "orange" : (isHeld ? "cyan" : "pink");
+      var rolling = !!(rollAnimIdx && rollAnimIdx.indexOf(i) !== -1);
+      d.className = "die" + (isHeld ? " held" : "");
+      d.innerHTML = dieMarkup(v, scheme, rolling);
+      if (clickable) {
+        (function (i) {
+          d.addEventListener("click", function () { toggleHold(i); });
+        })(i);
+      }
+      el.appendChild(d);
+    }
+  }
+
+  function render() {
+    var canHold = turn === "p" && rollsUsed > 0 && rollsUsed < 3 && !gameOver && !thinking;
+    renderDiceRow(diceEl, dice, held, canHold, false, pendingPlayerAnim);
+    pendingPlayerAnim = null;
+    renderDiceRow(mdiceEl, mDiceShown || [0, 0, 0, 0, 0], null, false, true, pendingMachineAnim);
+    pendingMachineAnim = null;
+
+    rollBtn.disabled = !(turn === "p" && rollsUsed < 3 && !gameOver && !thinking);
+    rollBtn.textContent = rollsUsed === 0 ? "Roll" : "Reroll (" + (2 - (rollsUsed - 1)) + " left)";
+
+    renderScorecard();
+
+    var filled = ALL_CATS.length - openCategories(player).length;
+    statRound.textContent = "round " + Math.min(filled + 1, 13) + " / 13";
+  }
+
+  function renderScorecard() {
+    scorebody.innerHTML = "";
+    var canPick = turn === "p" && rollsUsed > 0 && !gameOver && !thinking;
+
+    function addRow(catKey, label) {
+      var tr = document.createElement("tr");
+      var tdCat = document.createElement("td");
+      tdCat.className = "cat";
+      tdCat.textContent = label;
+      tr.appendChild(tdCat);
+
+      var tdYou = document.createElement("td");
+      tdYou.className = "you";
+      var pv = player.scores[catKey];
+      if (pv !== null) { tdYou.textContent = pv; tdYou.classList.add("filled"); }
+      else if (canPick) {
+        tdYou.textContent = scoreCategory(catKey, dice);
+        tdYou.classList.add("pick");
+        tdYou.addEventListener("click", function () { pickCategory(catKey); });
+      } else {
+        tdYou.textContent = "\u2013";
+      }
+      tr.appendChild(tdYou);
+
+      var tdM = document.createElement("td");
+      tdM.className = "mach";
+      var mv = machine.scores[catKey];
+      tdM.textContent = mv !== null ? mv : "\u2013";
+      if (mv !== null) tdM.classList.add("mfilled");
+      tr.appendChild(tdM);
+
+      scorebody.appendChild(tr);
+    }
+
+    function addGroupLabel(text) {
+      var tr = document.createElement("tr");
+      tr.className = "grp";
+      var td = document.createElement("td");
+      td.className = "cat";
+      td.colSpan = 3;
+      td.textContent = text;
+      tr.appendChild(td);
+      scorebody.appendChild(tr);
+    }
+
+    addGroupLabel("upper section");
+    UPPER.forEach(function (c) { addRow(c[0], c[1]); });
+
+    var pUp = upperSubtotal(player), mUp = upperSubtotal(machine);
+    addTotalRow("subtotal", pUp, mUp);
+    addTotalRow("bonus (63+ \u2192 35)", pUp >= 63 ? 35 : 0, mUp >= 63 ? 35 : 0);
+
+    addGroupLabel("lower section");
+    LOWER.forEach(function (c) { addRow(c[0], c[1]); });
+
+    addTotalRow("yahtzee bonus", player.extra * 100, machine.extra * 100);
+    addTotalRow("grand total", grandTotal(player), grandTotal(machine));
+
+    function addTotalRow(label, pv, mv) {
+      var tr = document.createElement("tr");
+      tr.className = "total";
+      var tdCat = document.createElement("td");
+      tdCat.className = "cat";
+      tdCat.textContent = label;
+      var tdY = document.createElement("td");
+      tdY.textContent = pv;
+      var tdM = document.createElement("td");
+      tdM.textContent = mv;
+      tr.appendChild(tdCat); tr.appendChild(tdY); tr.appendChild(tdM);
+      scorebody.appendChild(tr);
+    }
+  }
+
+  function toggleHold(i) {
+    if (turn !== "p" || rollsUsed === 0 || rollsUsed >= 3 || gameOver || thinking) return;
+    held[i] = !held[i];
+    render();
+  }
+
+  function rollDice() {
+    if (turn !== "p" || rollsUsed >= 3 || gameOver || thinking) return;
+    var rolledIdx = [];
+    for (var i = 0; i < 5; i++) if (!held[i]) { dice[i] = rollDie(); rolledIdx.push(i); }
+    rollsUsed++;
+    if (rollsUsed === 1) held = [false, false, false, false, false];
+    pendingPlayerAnim = rolledIdx;
+    render();
+    if (isYahtzeeRoll(dice)) setStatus("five of a kind!", "pink");
+    else setStatus(rollsUsed < 3 ? "hold what you like, then roll again — or pick a category" : "final roll — pick a category", "");
+  }
+
+  function pickCategory(cat) {
+    if (turn !== "p" || rollsUsed === 0 || gameOver || thinking) return;
+    if (player.scores[cat] !== null) return;
+    var already = player.scores.yahtzee === 50;
+    if (already && isYahtzeeRoll(dice) && cat !== "yahtzee") player.extra++;
+    player.scores[cat] = scoreCategory(cat, dice);
+    rollsUsed = 0;
+    held = [false, false, false, false, false];
+    dice = [0, 0, 0, 0, 0];
+
+    if (openCategories(player).length === 0 && openCategories(machine).length === 0) {
+      endGame();
+      return;
+    }
+    turn = "a";
+    render();
+    setTimeout(machineTurn, 250);
+  }
+
+  function machineTurn() {
+    if (openCategories(machine).length === 0) { turn = "p"; render(); setStatus("your turn — roll the dice", ""); return; }
+    thinking = true;
+    setStatus("machine is rolling...", "dim");
+    var mDice = [0, 0, 0, 0, 0];
+    var mHeld = [false, false, false, false, false];
+    var rolls = 0;
+
+    function step() {
+      var rolledIdx = [];
+      for (var i = 0; i < 5; i++) if (!mHeld[i]) { mDice[i] = rollDie(); rolledIdx.push(i); }
+      rolls++;
+      mDiceShown = mDice.slice();
+      pendingMachineAnim = rolledIdx;
+      render();
+
+      var openCats = openCategories(machine);
+      if (rolls < 3 && !(isYahtzeeRoll(mDice))) {
+        mHeld = chooseHolds(mDice, openCats);
+        setTimeout(step, 350);
+      } else {
+        setTimeout(function () {
+          var cat = chooseCategory(mDice, openCats);
+          var already = machine.scores.yahtzee === 50;
+          if (already && isYahtzeeRoll(mDice) && cat !== "yahtzee") machine.extra++;
+          machine.scores[cat] = scoreCategory(cat, mDice);
+          thinking = false;
+
+          if (openCategories(player).length === 0 && openCategories(machine).length === 0) {
+            render();
+            endGame();
+            return;
+          }
+          turn = "p";
+          render();
+          setStatus("your turn — roll the dice", "");
+        }, 350);
+      }
+    }
+    setTimeout(step, 300);
+  }
+
+  function endGame() {
+    gameOver = true;
+    var pt = grandTotal(player), mt = grandTotal(machine);
+    if (pt > mt) setStatus("game over — you win, " + pt + " to " + mt, "pink");
+    else if (mt > pt) setStatus("game over — machine wins, " + mt + " to " + pt, "orange");
+    else setStatus("game over — tied at " + pt, "dim");
+    render();
+  }
+
+  // ---------- controls ----------
+  document.getElementById("btn-new").addEventListener("click", newGame);
+  rollBtn.addEventListener("click", rollDice);
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  function openRules() { rulesOverlay.hidden = false; }
+  function closeRules() { rulesOverlay.hidden = true; }
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-rules-close").addEventListener("click", closeRules);
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) closeRules(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) closeRules();
+  });
+
+  newGame();
+
+  // when embedded in the terminal, the back-link is redundant — disable it
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

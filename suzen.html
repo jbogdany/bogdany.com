@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="chat-shortcut.js"></script>
+<title>Suzen — Cross the Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Zen+Maru+Gothic:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f1e9d8;
+    --ink:#2a2320;
+    --board:#1b2338;
+    --red-a:#c0392b;
+    --red-b:#8f2318;
+    --teal-a:#1f8b9a;
+    --teal-b:#125e69;
+    --wood-line:#7a5a2e;
+    --shadow: 0 18px 40px -18px rgba(0,0,0,.5);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    min-height:100vh;
+    background:
+      radial-gradient(1200px 700px at 12% -10%, #fbf4e2 0%, transparent 60%),
+      radial-gradient(1000px 800px at 110% 110%, #e9dcc0 0%, transparent 55%),
+      var(--paper);
+    font-family:'Zen Maru Gothic', sans-serif;
+    color:var(--ink);
+    display:flex;
+    justify-content:center;
+    padding:28px 14px 60px;
+  }
+
+  .wrap{width:100%;max-width:1080px;}
+
+  /* ---------- Header ---------- */
+  header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:20px;
+    margin-bottom:22px;
+    flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:16px;}
+  .badge{
+    font-family:'Bungee', sans-serif;
+    background:linear-gradient(160deg,var(--red-a),var(--red-b));
+    color:#fdf3e7;
+    padding:12px 22px;
+    border-radius:6px;
+    font-size:clamp(28px,4.2vw,42px);
+    letter-spacing:2px;
+    box-shadow:var(--shadow);
+    transform:rotate(-1.2deg);
+    position:relative;
+  }
+  .badge:before{
+    content:"";
+    position:absolute;inset:4px;
+    border:1.5px solid rgba(255,255,255,.35);
+    border-radius:3px;
+  }
+  .tagline{
+    font-size:13px;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    color:#6b5c47;
+    max-width:280px;
+    line-height:1.5;
+  }
+  .ratings{display:flex;gap:6px;}
+  .rating-tab{
+    writing-mode:vertical-rl;
+    font-family:'Bungee',sans-serif;
+    font-size:11px;
+    letter-spacing:2px;
+    padding:10px 7px;
+    border-radius:5px;
+    color:#eafaf9;
+  }
+  .rating-tab.easy{background:linear-gradient(160deg,var(--teal-a),var(--teal-b));}
+  .rating-tab.hard{background:linear-gradient(160deg,#2a3550,#161c2c);}
+
+  /* ---------- Layout ---------- */
+  .layout{
+    display:grid;
+    grid-template-columns:240px minmax(0,1fr);
+    gap:22px;
+    align-items:start;
+  }
+  .layout.no-side{grid-template-columns:1fr;}
+  @media (max-width:820px){
+    .layout{grid-template-columns:1fr;}
+  }
+
+  .side-col.hidden{display:none;}
+
+  .panel{
+    background:linear-gradient(160deg,#fbf6e9,#f0e5cb);
+    border:1px solid #ddc99a;
+    border-radius:14px;
+    padding:16px 16px 18px;
+    box-shadow:0 10px 24px -16px rgba(60,40,10,.35);
+    margin-bottom:16px;
+  }
+  .panel h3{
+    margin:0 0 10px;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:#8a6a2f;
+    font-weight:700;
+  }
+
+  .status-line{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-weight:700;
+    font-size:15px;
+    padding:10px 12px;
+    border-radius:10px;
+    background:#fff8ea;
+    border:1px solid #e6d5a8;
+    margin-bottom:14px;
+  }
+  .status-dot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 2px rgba(255,255,255,.5);}
+  .status-dot.red{background:linear-gradient(160deg,var(--red-a),var(--red-b));}
+  .status-dot.blue{background:linear-gradient(160deg,var(--teal-a),var(--teal-b));}
+  .status-dot.thinking{animation:pulse 1s infinite ease-in-out;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+  .captives{display:flex;flex-direction:column;gap:10px;}
+  .captive-row{display:flex;align-items:center;justify-content:space-between;font-size:13px;}
+  .captive-count{font-family:'Bungee',sans-serif;font-size:18px;}
+  .captive-count.red{color:var(--red-a);}
+  .captive-count.blue{color:var(--teal-a);}
+
+  button{
+    font-family:'Zen Maru Gothic',sans-serif;
+    font-weight:700;
+    cursor:pointer;
+    border:none;
+    border-radius:9px;
+    padding:10px 12px;
+    font-size:13px;
+    width:100%;
+    margin-bottom:8px;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  button:hover{filter:brightness(1.06);}
+  button:active{transform:scale(.97);}
+  .btn-primary{background:linear-gradient(160deg,var(--red-a),var(--red-b));color:#fff5e9;}
+  .btn-secondary{background:#e8dcc0;color:#5c4a26;border:1px solid #cdb682;}
+
+  .seg{
+    display:flex;
+    border:1px solid #cdb682;
+    border-radius:9px;
+    overflow:hidden;
+    margin-bottom:10px;
+  }
+  .seg button{
+    margin:0;border-radius:0;background:#f5ecd6;color:#6b5a37;font-size:12.5px;
+  }
+  .seg button.active{background:linear-gradient(160deg,var(--red-a),var(--red-b));color:#fff5e9;}
+  .seg button:last-child.active{background:linear-gradient(160deg,var(--teal-a),var(--teal-b));}
+
+  .sub-options{display:none;}
+  .sub-options.show{display:block;}
+  .sub-options label{
+    display:block;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#8a6a2f;
+    margin:10px 0 4px;
+  }
+
+  .hint{font-size:12px;color:#7a6a4d;line-height:1.5;margin-top:6px;}
+
+  .join-row{display:flex;gap:6px;}
+  .join-input{
+    flex:1;
+    min-width:0;
+    padding:9px 10px;
+    border-radius:8px;
+    border:1px solid #cdb682;
+    background:#fbf6e9;
+    font-family:'Zen Maru Gothic',sans-serif;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--ink);
+  }
+  .join-input:focus{outline:2px solid var(--teal-a);outline-offset:1px;}
+  .join-btn{width:auto;flex:none;margin:0;}
+  .room-code{
+    font-family:'Bungee',sans-serif;
+    font-size:24px;
+    letter-spacing:4px;
+    color:var(--red-a);
+    padding:4px 0 2px;
+  }
+
+  /* ---------- Board area ---------- */
+  .board-col{display:flex;flex-direction:column;align-items:center;}
+
+  .toolbar{
+    display:flex;
+    gap:8px;
+    margin-bottom:12px;
+    width:100%;
+    max-width:560px;
+  }
+  .toolbar.hide{display:none;}
+  .toolbar button{margin:0;width:auto;flex:1;font-size:12.5px;}
+
+  .board-shell{
+    position:relative;
+    background:var(--board);
+    border-radius:16px;
+    padding:18px;
+    box-shadow:var(--shadow);
+    width:100%;
+    max-width:560px;
+  }
+  .board-frame{
+    position:relative;
+    border:2px solid var(--teal-a);
+    border-radius:6px;
+    padding:6px;
+    background:linear-gradient(160deg,#212b45,#141a2c);
+  }
+  .board-frame:before{
+    content:"";
+    position:absolute;inset:0;
+    border:2px solid var(--red-a);
+    margin:5px;
+    border-radius:4px;
+    pointer-events:none;
+    opacity:.8;
+  }
+
+  .strip{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    padding:8px 4px;
+  }
+  .strip .label{
+    font-family:'Bungee',sans-serif;
+    font-size:13px;
+    letter-spacing:2px;
+    padding:6px 16px;
+    border-radius:4px;
+  }
+  .strip.top .label{background:var(--red-a);color:#fdf3e7;}
+  .strip.bottom .label{background:var(--teal-a);color:#eafaf9;}
+  .blossoms{flex:1;height:26px;opacity:.85;}
+
+  .grid{
+    display:grid;
+    gap:2px;
+    background:rgba(0,0,0,.35);
+    border-radius:3px;
+    overflow:hidden;
+    transition:aspect-ratio .35s ease;
+  }
+
+  .sq{
+    position:relative;
+    background:#1c2440;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:default;
+  }
+  .sq.home-red{background:#241a1c;}
+  .sq.home-blue{background:#16232a;}
+  .sq.selected{outline:2px solid #f4d06a;outline-offset:-2px;}
+  .sq.legal{cursor:pointer;}
+  .sq.legal:after{
+    content:"";
+    position:absolute;
+    width:26%;height:26%;
+    border-radius:50%;
+    background:rgba(244,208,106,.85);
+    box-shadow:0 0 8px rgba(244,208,106,.6);
+  }
+  .sq.legal.capture:after{
+    width:70%;height:70%;
+    background:transparent;
+    border:3px solid rgba(224,80,64,.9);
+    box-shadow:0 0 10px rgba(224,80,64,.55);
+  }
+  .sq.clickable-own{cursor:pointer;}
+  .sq svg{width:82%;height:82%;filter:drop-shadow(0 3px 3px rgba(0,0,0,.45));transition:transform .12s ease;}
+  .sq.clickable-own:hover svg{transform:scale(1.05);}
+
+  .winbar{
+    margin-top:16px;
+    text-align:center;
+    font-family:'Bungee',sans-serif;
+    font-size:20px;
+    padding:14px;
+    border-radius:10px;
+    color:#fff8ea;
+    letter-spacing:1px;
+    display:none;
+    max-width:560px;
+    width:100%;
+  }
+  .winbar.show{display:block;}
+
+  .show-menu-fab{
+    display:none;
+    margin-bottom:12px;
+  }
+  .show-menu-fab.show{display:block;max-width:560px;width:100%;}
+
+  /* ---------- Rules modal ---------- */
+  .modal-back{
+    position:fixed;inset:0;
+    background:rgba(20,14,8,.55);
+    display:none;
+    align-items:center;justify-content:center;
+    padding:20px;
+    z-index:50;
+  }
+  .modal-back.show{display:flex;}
+  .modal{
+    background:#fbf6e9;
+    border-radius:16px;
+    max-width:640px;
+    max-height:82vh;
+    overflow-y:auto;
+    padding:26px 28px 30px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,.5);
+  }
+  .modal h2{font-family:'Bungee',sans-serif;color:var(--red-a);letter-spacing:1px;margin-top:0;}
+  .modal h4{margin-bottom:4px;color:#7a5a2e;}
+  .modal p, .modal li{font-size:14px;line-height:1.6;color:#3b3226;}
+  .modal .close{width:auto;float:right;background:#e8dcc0;color:#5c4a26;padding:8px 16px;}
+
+  footer{
+    text-align:center;
+    font-size:11px;
+    color:#9a8a6a;
+    margin-top:26px;
+    letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="badge">SUZEN</div>
+      <div class="tagline">Break your opponent's line and cross into their home territory to win.</div>
+    </div>
+    <div class="ratings">
+      <div class="rating-tab easy">EASY TO LEARN</div>
+      <div class="rating-tab hard">HARD TO MASTER</div>
+    </div>
+  </header>
+
+  <div class="layout" id="layout">
+    <div class="side-col" id="sideCol">
+
+      <div class="panel">
+        <h3>Opponent</h3>
+        <div class="seg" id="modeSeg">
+          <button data-mode="human" class="active">2 Players</button>
+          <button data-mode="computer">Computer</button>
+          <button data-mode="online">Online</button>
+        </div>
+
+        <div class="sub-options" id="computerOptions">
+          <label>Difficulty</label>
+          <div class="seg" id="diffSeg">
+            <button data-diff="easy" class="active">Easy</button>
+            <button data-diff="medium">Medium</button>
+            <button data-diff="hard">Hard</button>
+          </div>
+          <label>You play as</label>
+          <div class="seg" id="colorSeg">
+            <button data-color="red" class="active">Red</button>
+            <button data-color="blue">Blue</button>
+          </div>
+        </div>
+
+        <div class="sub-options" id="onlineOptions">
+          <div id="onlineSetup">
+            <button class="btn-primary" id="onlineCreateBtn">Create New Game</button>
+            <label>Have a code?</label>
+            <div class="join-row">
+              <input type="text" id="onlineJoinInput" class="join-input" placeholder="ROOM CODE" maxlength="8">
+              <button class="btn-secondary join-btn" id="onlineJoinBtn">Join</button>
+            </div>
+            <div id="onlineReconnectWrap" style="display:none;">
+              <button class="btn-secondary" id="onlineReconnectBtn">Reconnect to last game</button>
+            </div>
+            <div class="hint" id="onlineSetupMsg"></div>
+          </div>
+          <div id="onlineRoomInfo" style="display:none;">
+            <div class="hint">Room code — share it with your opponent</div>
+            <div class="room-code" id="onlineRoomCodeDisplay"></div>
+            <div class="hint" id="onlineYouAre"></div>
+            <div class="hint" id="onlineStatusMsg"></div>
+            <button class="btn-secondary" id="onlineLeaveBtn">Leave Game</button>
+          </div>
+        </div>
+      </div>
+
+
+      <div class="panel">
+        <h3>Turn</h3>
+        <div class="status-line" id="statusLine">
+          <span class="status-dot red" id="statusDot"></span>
+          <span id="statusText">Red to move</span>
+        </div>
+
+        <h3>Captured</h3>
+        <div class="captives">
+          <div class="captive-row"><span>Red pieces lost</span><span class="captive-count red" id="redLost">0</span></div>
+          <div class="captive-row"><span>Blue pieces lost</span><span class="captive-count blue" id="blueLost">0</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <button class="btn-primary" id="newGameBtn">New Game</button>
+        <button class="btn-secondary" id="rulesBtn">How to Play</button>
+        <button class="btn-secondary" id="cancelBtn">Cancel Selection</button>
+        <div class="hint" id="turnHint">Tap one of your pieces, then tap a glowing square to move it.</div>
+      </div>
+    </div>
+
+    <div class="board-col">
+      <button class="btn-secondary show-menu-fab" id="showMenuBtn">☰ Show Menu</button>
+      <div class="toolbar" id="toolbar">
+        <button class="btn-secondary" id="hideMenuBtn">☰ Hide Menu</button>
+        <button class="btn-secondary" id="rotateBtn">⤾ Rotate Board</button>
+      </div>
+
+      <div class="board-shell">
+        <div class="board-frame">
+          <div class="strip top">
+            <svg class="blossoms" viewBox="0 0 300 26" preserveAspectRatio="none"><use href="#blossomLine"/></svg>
+            <span class="label">SUZEN</span>
+          </div>
+          <div class="grid" id="grid"></div>
+          <div class="strip bottom">
+            <span class="label">SUZEN</span>
+            <svg class="blossoms" viewBox="0 0 300 26" preserveAspectRatio="none"><use href="#blossomLine"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="winbar" id="winbar"></div>
+    </div>
+  </div>
+
+  <footer>A digital adaptation of the Suzen rules — 6×8 board, twelve pieces per side.</footer>
+</div>
+
+<!-- shared defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="woodGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f1e0b4"/>
+      <stop offset="100%" stop-color="#c9a668"/>
+    </linearGradient>
+    <g id="blossomLine">
+      <g fill="#e8a9bd" opacity=".9">
+        <circle cx="10" cy="13" r="3.4"/><circle cx="17" cy="9" r="3"/><circle cx="24" cy="15" r="3.2"/>
+        <circle cx="60" cy="8" r="2.6"/><circle cx="66" cy="13" r="3"/>
+        <circle cx="240" cy="9" r="3"/><circle cx="247" cy="15" r="2.6"/>
+        <circle cx="280" cy="12" r="3.4"/><circle cx="287" cy="8" r="2.8"/><circle cx="292" cy="16" r="2.6"/>
+      </g>
+      <path d="M0 20 Q80 4 170 18 T300 12" stroke="#5c4326" stroke-width="1.2" fill="none" opacity=".5"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="modal-back" id="rulesModal">
+  <div class="modal">
+    <button class="close" id="closeRules">Close</button>
+    <h2>Suzen — Rules</h2>
+
+    <h4>Object</h4>
+    <p>Create a passage through your opponent's defenses and cross into their home territory (their back row) to win. A piece that reaches the opponent's home territory cannot be captured.</p>
+
+    <h4>Setup</h4>
+    <p>Each side has twelve pieces: six "1" pieces on the front line, six "2" pieces on the back-row home territory.</p>
+
+    <h4>Movement</h4>
+    <p>Pieces move orthogonally only — forward, backward, left, or right, never diagonally, and only in one direction per turn. Each piece's four small numbers show the maximum squares it may travel in each direction, relative to the way it's facing:</p>
+    <ul>
+      <li><strong>No. 1 piece:</strong> 1 forward, 2 right, 3 backward, 4 left.</li>
+      <li><strong>No. 2 piece:</strong> 2 forward, 3 right, 4 backward, 1 left.</li>
+    </ul>
+    <p>A piece always moves the exact number of squares shown for that direction — never fewer, never more — and only if that exact square stays on the board.</p>
+
+    <h4>Jumping &amp; capturing</h4>
+    <p>Pieces may jump over any piece — their own or an opponent's — along their path. A square may never be landed on if it holds one of your own pieces. Any opponent piece that is jumped over, or landed on, is captured and removed from the board. Up to four opponent pieces can be captured in a single move.</p>
+
+    <h4>Winning</h4>
+    <p>The moment a piece crosses into the opponent's home territory, the game ends immediately. The game can also be won by capturing every one of the opponent's pieces, though this is rare. The game cannot end in a tie.</p>
+
+    <h4>Computer opponent</h4>
+    <p><strong>Easy</strong> picks a random legal move. <strong>Medium</strong> favors captures and forward progress, with a little randomness. <strong>Hard</strong> looks a full round ahead — your best reply included — and avoids moves that hand you an easy win.</p>
+
+    <h4>Tips</h4>
+    <ul>
+      <li>Defend "1" pieces with "2" pieces.</li>
+      <li>Leaving too many "2" pieces at home is a weak strategy.</li>
+      <li>Neither piece type is stronger — they're strong in different ways, and you'll need both for a good endgame.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+  const ROWS = 8, COLS = 6;
+  const RED = 'red', BLUE = 'blue';
+
+  const TYPE_DIST = {
+    1: { forward:1, right:2, backward:3, left:4 },
+    2: { forward:2, right:3, backward:4, left:1 }
+  };
+
+  function facing(color, dir){
+    const F = color === RED ? {dr:-1,dc:0} : {dr:1,dc:0};
+    const R = color === RED ? {dr:0,dc:1} : {dr:0,dc:-1};
+    const B = {dr:-F.dr, dc:-F.dc};
+    const L = {dr:-R.dr, dc:-R.dc};
+    return {forward:F, right:R, backward:B, left:L}[dir];
+  }
+
+  function homeRow(color){ return color === RED ? 7 : 0; }
+  function opponentHomeRow(color){ return color === RED ? 0 : 7; }
+  function inBounds(r,c){ return r>=0 && r<ROWS && c>=0 && c<COLS; }
+  function otherColor(color){ return color===RED ? BLUE : RED; }
+
+  // ---------- Pure game logic (works on any board array) ----------
+  function computeMoves(boardArg, r, c){
+    const piece = boardArg[r][c];
+    if(!piece) return [];
+    const dists = TYPE_DIST[piece.type];
+    const dirs = ['forward','right','backward','left'];
+    const moves = [];
+    dirs.forEach(dir=>{
+      const vec = facing(piece.color, dir);
+      const d = dists[dir]; // pieces move the exact number of spaces shown, not "up to"
+      const tr = r + vec.dr*d, tc = c + vec.dc*d;
+      if(!inBounds(tr,tc)) return; // moving off the board isn't a legal move in this direction
+      const occ = boardArg[tr][tc];
+      if(occ && occ.color === piece.color) return; // can't land on your own piece
+      const captures = [];
+      for(let k=1;k<=d;k++){
+        const kr = r+vec.dr*k, kc = c+vec.dc*k;
+        const kOcc = boardArg[kr][kc];
+        if(kOcc && kOcc.color !== piece.color) captures.push([kr,kc]);
+      }
+      moves.push({ r:tr, c:tc, dist:d, dir, captures });
+    });
+    return moves;
+  }
+
+  function allLegalMoves(boardArg, color){
+    const out = [];
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const p = boardArg[r][c];
+      if(p && p.color === color){
+        computeMoves(boardArg,r,c).forEach(m=>out.push({from:{r,c}, move:m}));
+      }
+    }
+    return out;
+  }
+
+  function cloneBoard(b){ return b.map(row=>row.map(cell=>cell?{...cell}:null)); }
+
+  function simulateMove(boardArg, fromR, fromC, move){
+    const nb = cloneBoard(boardArg);
+    const piece = nb[fromR][fromC];
+    move.captures.forEach(([cr,cc])=>{ nb[cr][cc] = null; });
+    nb[fromR][fromC] = null;
+    nb[move.r][move.c] = piece;
+    return nb;
+  }
+
+  function countPiecesOn(boardArg, color){
+    let n=0;
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++) if(boardArg[r][c] && boardArg[r][c].color===color) n++;
+    return n;
+  }
+
+  // score from the perspective of `perspectiveColor`
+  function evaluate(boardArg, perspectiveColor){
+    let score = 0;
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      const piece = boardArg[r][c];
+      if(!piece) continue;
+      const sign = piece.color === perspectiveColor ? 1 : -1;
+      score += sign*100;
+      const own = homeRow(piece.color);
+      const traveled = Math.abs(r - own);
+      score += sign*traveled*4;
+      if(r === opponentHomeRow(piece.color)) score += sign*100000;
+    }
+    return score;
+  }
+
+  // ---------- AI ----------
+  function chooseAIMove(boardArg, color, difficulty){
+    const moves = allLegalMoves(boardArg, color);
+    if(moves.length === 0) return null;
+
+    if(difficulty === 'easy'){
+      return moves[Math.floor(Math.random()*moves.length)];
+    }
+
+    if(difficulty === 'medium'){
+      const scored = moves.map(m=>{
+        const nb = simulateMove(boardArg, m.from.r, m.from.c, m.move);
+        let s = evaluate(nb, color);
+        if(m.move.r === opponentHomeRow(color)) s += 500000;
+        s += m.move.captures.length * 60;
+        return { m, s };
+      });
+      scored.sort((a,b)=>b.s-a.s);
+      const top = scored.slice(0, Math.min(3, scored.length));
+      return top[Math.floor(Math.random()*top.length)].m;
+    }
+
+    // hard: one full round of lookahead (this move, then opponent's best reply)
+    const opp = otherColor(color);
+    let best = -Infinity, bestMoves = [];
+    for(const m of moves){
+      if(m.move.r === opponentHomeRow(color)){
+        best = Infinity; bestMoves = [m]; break; // immediate win, take it
+      }
+      const nb = simulateMove(boardArg, m.from.r, m.from.c, m.move);
+      const oppMoves = allLegalMoves(nb, opp);
+      let worst;
+      if(oppMoves.length === 0){
+        worst = evaluate(nb, color);
+      } else {
+        worst = Infinity;
+        for(const om of oppMoves){
+          let s;
+          if(om.move.r === opponentHomeRow(opp)){
+            s = -1000000;
+          } else {
+            const nb2 = simulateMove(nb, om.from.r, om.from.c, om.move);
+            s = evaluate(nb2, color);
+          }
+          if(s < worst) worst = s;
+        }
+      }
+      if(worst > best){ best = worst; bestMoves = [m]; }
+      else if(worst === best){ bestMoves.push(m); }
+    }
+    return bestMoves[Math.floor(Math.random()*bestMoves.length)];
+  }
+
+  // ---------- Game state ----------
+  let board, current, selected, legalMoves, gameOver, lost;
+  let mode = 'human';          // 'human' | 'computer' | 'online'
+  let difficulty = 'easy';
+  let computerColor = BLUE;    // used only when mode === 'computer'
+  let aiThinking = false;
+  let rotation = 0;            // 0, 90, 180, 270
+
+  // online play (client-server, server is authoritative)
+  const API_BASE = 'api/';
+  let onlineGameId = null, onlineToken = null, onlineColor = null, onlineRoomCode = null;
+  let onlinePollTimer = null, onlineMoveNumber = -1;
+
+  function freshBoard(){
+    const b = [];
+    for(let r=0;r<ROWS;r++) b.push(new Array(COLS).fill(null));
+    for(let c=0;c<COLS;c++){
+      b[0][c] = {color:BLUE, type:2};
+      b[1][c] = {color:BLUE, type:1};
+      b[6][c] = {color:RED,  type:1};
+      b[7][c] = {color:RED,  type:2};
+    }
+    return b;
+  }
+
+  function newGame(){
+    board = freshBoard();
+    current = Math.random() < 0.5 ? RED : BLUE;
+    selected = null;
+    legalMoves = [];
+    gameOver = false;
+    lost = {red:0, blue:0};
+    aiThinking = false;
+    document.getElementById('winbar').classList.remove('show');
+
+    const firstName = current === RED ? 'Red' : 'Blue';
+    document.getElementById('turnHint').textContent = firstName + ' won the draw and moves first.';
+
+    render();
+    maybeTriggerAI();
+  }
+
+  function doMove(move){
+    const piece = board[selected.r][selected.c];
+    move.captures.forEach(([cr,cc])=>{
+      const cap = board[cr][cc];
+      if(cap){ lost[cap.color]++; board[cr][cc] = null; }
+    });
+    board[selected.r][selected.c] = null;
+    board[move.r][move.c] = piece;
+
+    let winner = null;
+    if(move.r === opponentHomeRow(piece.color)){
+      winner = piece.color;
+    } else if(countPiecesOn(board, otherColor(piece.color)) === 0){
+      winner = piece.color;
+    }
+
+    selected = null;
+    legalMoves = [];
+
+    if(winner){
+      gameOver = true;
+      announceWin(winner);
+    } else {
+      current = otherColor(piece.color);
+      document.getElementById('turnHint').textContent = 'Tap one of your pieces, then tap a glowing square to move it.';
+    }
+    render();
+    maybeTriggerAI();
+  }
+
+  function announceWin(color){
+    const bar = document.getElementById('winbar');
+    const name = color === RED ? 'Red' : 'Blue';
+    bar.textContent = name + ' crosses the line — ' + name + ' wins!';
+    bar.style.background = color === RED
+      ? 'linear-gradient(160deg,var(--red-a),var(--red-b))'
+      : 'linear-gradient(160deg,var(--teal-a),var(--teal-b))';
+    bar.classList.add('show');
+  }
+
+  function maybeTriggerAI(){
+    if(mode !== 'computer' || gameOver) return;
+    if(current !== computerColor) return;
+    aiThinking = true;
+    document.getElementById('turnHint').textContent = 'Computer is thinking…';
+    render();
+    setTimeout(()=>{
+      const picked = chooseAIMove(board, current, difficulty);
+      aiThinking = false;
+      if(!picked){ render(); return; }
+      selected = { r: picked.from.r, c: picked.from.c };
+      legalMoves = [picked.move];
+      doMove(picked.move);
+    }, 550 + Math.random()*350);
+  }
+
+  function selectSquare(r,c){
+    if(gameOver || aiThinking) return;
+    if(mode === 'computer' && current === computerColor) return; // not the human's turn
+    if(mode === 'online' && (!onlineGameId || current !== onlineColor)) return; // not connected, or not your turn
+
+    const piece = board[r][c];
+
+    if(selected){
+      const target = legalMoves.find(m=>m.r===r && m.c===c);
+      if(target){
+        if(mode === 'online'){
+          submitOnlineMove(selected.r, selected.c, target);
+          selected = null; legalMoves = [];
+          render();
+          return;
+        }
+        doMove(target);
+        return;
+      }
+    }
+
+    if(piece && piece.color === current){
+      selected = {r,c};
+      legalMoves = computeMoves(board,r,c);
+      render();
+      return;
+    }
+
+    selected = null;
+    legalMoves = [];
+    render();
+  }
+
+  // ---------- Piece SVG ----------
+  function pieceSVG(piece){
+    const isRed = piece.color === RED;
+    const main = isRed ? 'var(--red-a)' : 'var(--teal-a)';
+    const mainDeep = isRed ? 'var(--red-b)' : 'var(--teal-b)';
+    const d = TYPE_DIST[piece.type];
+    const rot = isRed ? '' : 'rotate(180 50 50)';
+    return `
+    <svg viewBox="0 0 100 100">
+      <g transform="${rot}">
+        <rect x="6" y="6" width="88" height="88" rx="16" fill="url(#woodGrad)" stroke="var(--wood-line)" stroke-width="2.5"/>
+        <path d="M50 10 L58 20 L42 20 Z" fill="${main}"/>
+        <circle cx="50" cy="50" r="21" fill="${main}" stroke="${mainDeep}" stroke-width="2"/>
+        <text x="50" y="59" text-anchor="middle" font-family="Bungee, sans-serif" font-size="26" fill="#fdf3e7">${piece.type}</text>
+        <g font-family="Zen Maru Gothic, sans-serif" font-weight="700" font-size="13" fill="${main}">
+          <text x="50" y="21" text-anchor="middle">${d.forward}</text>
+          <text x="80" y="54" text-anchor="middle">${d.right}</text>
+          <text x="50" y="87" text-anchor="middle">${d.backward}</text>
+          <text x="20" y="54" text-anchor="middle">${d.left}</text>
+        </g>
+      </g>
+    </svg>`;
+  }
+
+  // ---------- Rotation-aware rendering ----------
+  // maps logical (r,c) to a visual (vr,vc) position, and returns the visual grid's dims
+  function rotatedLayout(){
+    let vRows, vCols;
+    if(rotation === 0 || rotation === 180){ vRows = ROWS; vCols = COLS; }
+    else { vRows = COLS; vCols = ROWS; }
+
+    const map = [];
+    for(let i=0;i<vRows;i++) map.push(new Array(vCols).fill(null));
+
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        let vr, vc;
+        if(rotation === 0){ vr=r; vc=c; }
+        else if(rotation === 90){ vr=c; vc=(ROWS-1-r); }
+        else if(rotation === 180){ vr=(ROWS-1-r); vc=(COLS-1-c); }
+        else { vr=(COLS-1-c); vc=r; } // 270
+        map[vr][vc] = {r,c};
+      }
+    }
+    return { vRows, vCols, map };
+  }
+
+  // ---------- Render ----------
+  const gridEl = document.getElementById('grid');
+
+  function render(){
+    const { vRows, vCols, map } = rotatedLayout();
+    gridEl.style.gridTemplateColumns = `repeat(${vCols}, 1fr)`;
+    gridEl.style.gridTemplateRows = `repeat(${vRows}, 1fr)`;
+    gridEl.style.aspectRatio = `${vCols} / ${vRows}`;
+    gridEl.innerHTML = '';
+
+    for(let vr=0; vr<vRows; vr++){
+      for(let vc=0; vc<vCols; vc++){
+        const { r, c } = map[vr][vc];
+        const sq = document.createElement('div');
+        sq.className = 'sq';
+        if(r === homeRow(RED)) sq.classList.add('home-red');
+        if(r === homeRow(BLUE)) sq.classList.add('home-blue');
+
+        if(selected && selected.r===r && selected.c===c) sq.classList.add('selected');
+
+        const moveHere = legalMoves.find(m=>m.r===r && m.c===c);
+        if(moveHere){
+          sq.classList.add('legal');
+          if(moveHere.captures.length) sq.classList.add('capture');
+        }
+
+        const piece = board[r][c];
+        if(piece){
+          sq.innerHTML = pieceSVG(piece);
+          const notMyComputerTurn = (mode==='computer' && current===computerColor);
+          const notMyOnlineTurn = (mode==='online' && (!onlineGameId || current!==onlineColor));
+          if(!gameOver && !aiThinking && piece.color === current && !notMyComputerTurn && !notMyOnlineTurn){
+            sq.classList.add('clickable-own');
+          }
+        }
+
+        sq.addEventListener('click', ()=>selectSquare(r,c));
+        gridEl.appendChild(sq);
+      }
+    }
+
+    const dot = document.getElementById('statusDot');
+    const text = document.getElementById('statusText');
+    dot.className = 'status-dot ' + current + (aiThinking ? ' thinking' : '');
+    let label = (current===RED?'Red':'Blue') + ' to move';
+    if(mode==='computer'){
+      label += current===computerColor ? ' (computer)' : ' (you)';
+    } else if(mode==='online' && onlineGameId){
+      label += current===onlineColor ? ' (you)' : " (opponent)";
+    }
+    if(selected) label += ' — piece selected';
+    text.textContent = label;
+
+    document.getElementById('redLost').textContent = lost.red;
+    document.getElementById('blueLost').textContent = lost.blue;
+  }
+
+  // ---------- UI wiring ----------
+  document.getElementById('newGameBtn').addEventListener('click', newGame);
+  document.getElementById('cancelBtn').addEventListener('click', ()=>{ selected=null; legalMoves=[]; render(); });
+  document.getElementById('rulesBtn').addEventListener('click', ()=> document.getElementById('rulesModal').classList.add('show'));
+  document.getElementById('closeRules').addEventListener('click', ()=> document.getElementById('rulesModal').classList.remove('show'));
+  document.getElementById('rulesModal').addEventListener('click', (e)=>{ if(e.target.id==='rulesModal') e.currentTarget.classList.remove('show'); });
+
+  const modeSeg = document.getElementById('modeSeg');
+  const computerOptions = document.getElementById('computerOptions');
+  const onlineOptions = document.getElementById('onlineOptions');
+  const newGameBtn = document.getElementById('newGameBtn');
+  modeSeg.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    [...modeSeg.children].forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    computerOptions.classList.toggle('show', mode==='computer');
+    onlineOptions.classList.toggle('show', mode==='online');
+    newGameBtn.style.display = mode==='online' ? 'none' : '';
+    updateModeVisibleControls();
+    stopOnlinePolling();
+    if(mode === 'online'){
+      enterOnlineSetup();
+    } else {
+      onlineGameId = null; onlineToken = null; onlineColor = null; onlineRoomCode = null;
+      newGame();
+    }
+  });
+
+  const diffSeg = document.getElementById('diffSeg');
+  diffSeg.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    [...diffSeg.children].forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    difficulty = btn.dataset.diff;
+    newGame();
+  });
+
+  const colorSeg = document.getElementById('colorSeg');
+  colorSeg.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    [...colorSeg.children].forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const humanColor = btn.dataset.color;
+    computerColor = humanColor === 'red' ? BLUE : RED;
+    newGame();
+  });
+
+  // menu hide/show + board rotation (surfaced for local 2-player games)
+  const layoutEl = document.getElementById('layout');
+  const sideCol = document.getElementById('sideCol');
+  const showMenuBtn = document.getElementById('showMenuBtn');
+  const hideMenuBtn = document.getElementById('hideMenuBtn');
+  const rotateBtn = document.getElementById('rotateBtn');
+  const toolbar = document.getElementById('toolbar');
+
+  hideMenuBtn.addEventListener('click', ()=>{
+    sideCol.classList.add('hidden');
+    layoutEl.classList.add('no-side');
+    showMenuBtn.classList.add('show');
+  });
+  showMenuBtn.addEventListener('click', ()=>{
+    sideCol.classList.remove('hidden');
+    layoutEl.classList.remove('no-side');
+    showMenuBtn.classList.remove('show');
+  });
+  rotateBtn.addEventListener('click', ()=>{
+    rotation = (rotation + 90) % 360;
+    render();
+  });
+
+  function updateModeVisibleControls(){
+    // hide/rotate controls are most useful for a shared local match
+    toolbar.classList.toggle('hide', mode !== 'human');
+    if(mode !== 'human'){
+      sideCol.classList.remove('hidden');
+      layoutEl.classList.remove('no-side');
+      showMenuBtn.classList.remove('show');
+      rotation = 0;
+    }
+  }
+
+  // ---------- online play (client-server) ----------
+  const SESSION_KEY = 'suzen-online-session';
+
+  async function apiPost(path, body){
+    const res = await fetch(API_BASE + path, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body || {})
+    });
+    let data = {};
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || data.error) throw new Error(data.error || ('request failed (' + res.status + ')'));
+    return data;
+  }
+  async function apiGet(path, params){
+    const qs = new URLSearchParams(params || {}).toString();
+    const res = await fetch(API_BASE + path + (qs ? ('?' + qs) : ''));
+    let data = {};
+    try { data = await res.json(); } catch(e){}
+    if(!res.ok || data.error) throw new Error(data.error || ('request failed (' + res.status + ')'));
+    return data;
+  }
+
+  function saveOnlineSession(){
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        gameId: onlineGameId, token: onlineToken, color: onlineColor, room: onlineRoomCode
+      }));
+    } catch(e){}
+  }
+  function loadOnlineSession(){
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); } catch(e){ return null; }
+  }
+  function clearOnlineSession(){ try { localStorage.removeItem(SESSION_KEY); } catch(e){} }
+
+  function onlineMsg(text){
+    const el = document.getElementById('onlineSetupMsg');
+    if(el) el.textContent = text || '';
+  }
+
+  function enterOnlineSetup(){
+    document.getElementById('onlineSetup').style.display = 'block';
+    document.getElementById('onlineRoomInfo').style.display = 'none';
+    onlineMsg('');
+    const s = loadOnlineSession();
+    document.getElementById('onlineReconnectWrap').style.display = s ? 'block' : 'none';
+    board = freshBoard();
+    current = RED;
+    gameOver = false;
+    selected = null; legalMoves = [];
+    document.getElementById('winbar').classList.remove('show');
+    render();
+  }
+
+  function showOnlineRoom(){
+    document.getElementById('onlineSetup').style.display = 'none';
+    document.getElementById('onlineRoomInfo').style.display = 'block';
+    document.getElementById('onlineRoomCodeDisplay').textContent = onlineRoomCode;
+    document.getElementById('onlineYouAre').textContent = 'You are playing ' + (onlineColor === RED ? 'Red' : 'Blue') + '.';
+  }
+
+  function applyServerState(data){
+    const changed = data.move_number !== onlineMoveNumber;
+    board = data.board;
+    current = data.current_turn;
+    gameOver = data.status === 'finished';
+    lost.red = 12 - countPiecesOn(board, RED);
+    lost.blue = 12 - countPiecesOn(board, BLUE);
+    if(changed){
+      // only drop the player's current selection when a real move happened —
+      // a routine poll with nothing new shouldn't deselect their piece
+      selected = null; legalMoves = [];
+    }
+    onlineMoveNumber = data.move_number;
+
+    const statusEl = document.getElementById('onlineStatusMsg');
+    if(statusEl){
+      if(data.status === 'waiting') statusEl.textContent = 'Waiting for an opponent to join with this code…';
+      else if(data.status === 'finished') statusEl.textContent = (data.winner === RED ? 'Red' : 'Blue') + ' won this game.';
+      else statusEl.textContent = current === onlineColor ? 'Your move.' : "Waiting for opponent's move…";
+    }
+
+    if(gameOver && data.winner){
+      announceWin(data.winner);
+    } else {
+      document.getElementById('winbar').classList.remove('show');
+    }
+    render();
+  }
+
+  async function createOnlineGame(){
+    onlineMsg('Creating game…');
+    try {
+      const data = await apiPost('create.php', {});
+      onlineGameId = data.game_id; onlineToken = data.token;
+      onlineColor = data.color; onlineRoomCode = data.room_code;
+      saveOnlineSession();
+      showOnlineRoom();
+      startOnlinePolling();
+    } catch(e){ onlineMsg(e.message); }
+  }
+
+  async function joinOnlineGame(code){
+    onlineMsg('Joining…');
+    try {
+      const data = await apiPost('join.php', { room: code });
+      onlineGameId = data.game_id; onlineToken = data.token;
+      onlineColor = data.color; onlineRoomCode = data.room_code;
+      saveOnlineSession();
+      showOnlineRoom();
+      startOnlinePolling();
+    } catch(e){ onlineMsg(e.message); }
+  }
+
+  function reconnectOnlineGame(){
+    const s = loadOnlineSession();
+    if(!s) return;
+    onlineGameId = s.gameId; onlineToken = s.token;
+    onlineColor = s.color; onlineRoomCode = s.room;
+    showOnlineRoom();
+    startOnlinePolling();
+  }
+
+  function leaveOnlineGame(){
+    stopOnlinePolling();
+    onlineGameId = null; onlineToken = null; onlineColor = null; onlineRoomCode = null;
+    clearOnlineSession();
+    enterOnlineSetup();
+  }
+
+  async function pollOnlineState(){
+    if(!onlineGameId) return;
+    try {
+      const data = await apiGet('state.php', { game_id: onlineGameId, token: onlineToken });
+      applyServerState(data);
+    } catch(e){ /* transient network hiccup — try again next tick */ }
+  }
+
+  function startOnlinePolling(){
+    stopOnlinePolling();
+    pollOnlineState();
+    onlinePollTimer = setInterval(pollOnlineState, 2000);
+  }
+  function stopOnlinePolling(){
+    if(onlinePollTimer){ clearInterval(onlinePollTimer); onlinePollTimer = null; }
+  }
+
+  async function submitOnlineMove(fromR, fromC, move){
+    try {
+      const data = await apiPost('move.php', {
+        game_id: onlineGameId, token: onlineToken,
+        from: { r: fromR, c: fromC }, to: { r: move.r, c: move.c }
+      });
+      applyServerState(data);
+    } catch(e){
+      onlineMsg(e.message);
+      pollOnlineState(); // resync with server truth in case the move was rejected
+    }
+  }
+
+  document.getElementById('onlineCreateBtn').addEventListener('click', createOnlineGame);
+  document.getElementById('onlineJoinBtn').addEventListener('click', ()=>{
+    const code = document.getElementById('onlineJoinInput').value.trim().toUpperCase();
+    if(code) joinOnlineGame(code);
+  });
+  document.getElementById('onlineReconnectBtn').addEventListener('click', reconnectOnlineGame);
+  document.getElementById('onlineLeaveBtn').addEventListener('click', leaveOnlineGame);
+
+  updateModeVisibleControls();
+  newGame();
+})();
+</script>
+</body>
+</html>

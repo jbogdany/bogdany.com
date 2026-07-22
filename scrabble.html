@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script src="chat-shortcut.js"></script>
+<title>Scrabble: You vs AI</title>
+<style>
+  :root {
+    --dw: #f6b1a0;
+    --tw: #e04b3f;
+    --dl: #a7d0e8;
+    --tl: #3d7fb3;
+    --empty: #e9e3d6;
+    --bg: #1c1a17;
+    --panel: #2a2723;
+    --text: #f1ece0;
+    --accent: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+  }
+  h1 { width: 100%; text-align: center; font-size: 1.4em; letter-spacing: 1px; }
+  #boardWrap {
+    display: grid;
+    grid-template-columns: repeat(15, 32px);
+    grid-template-rows: repeat(15, 32px);
+    gap: 2px;
+    background: #0d0c0a;
+    padding: 6px;
+    border-radius: 6px;
+    align-content: start;
+  }
+  .cell {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    background: var(--empty);
+    position: relative;
+    padding: 0;
+  }
+  .cell.dw { background: var(--dw); }
+  .cell.tw { background: var(--tw); }
+  .cell.dl { background: var(--dl); }
+  .cell.tl { background: var(--tl); }
+  .cell.center { background: var(--accent); }
+  .cell.empty-interactive { cursor: pointer; }
+  .cell.empty-interactive:hover { filter: brightness(1.15); }
+  .cell.has-tile { cursor: default; }
+  .cell svg { width: 100%; height: 100%; display: block; }
+
+  #side {
+    width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .panel {
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .scores { display: flex; justify-content: space-between; font-size: 1.1em; }
+  .scores b { color: var(--accent); }
+  #status {
+    font-weight: bold;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  button {
+    background: var(--accent);
+    border: none;
+    color: #1c1a17;
+    font-weight: bold;
+    padding: 8px 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-right: 8px;
+    margin-bottom: 8px;
+  }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.secondary { background: #4a453d; color: var(--text); }
+  #log {
+    height: 240px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.5;
+    font-family: 'Consolas', monospace;
+    background: #17140f;
+    padding: 10px;
+    border-radius: 6px;
+  }
+  #log div.pass { color: #d97070; }
+  #log div.info { color: #9fd9a3; }
+  #log div.err { color: #e0a3a3; }
+
+  #rackContainer {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 0 4px 0;
+    min-height: 48px;
+    transition: opacity 0.2s;
+  }
+  #rackContainer.disabled { opacity: 0.45; pointer-events: none; }
+  .rack-tile {
+    width: 40px;
+    height: 40px;
+    cursor: grab;
+  }
+  .rack-tile.selected svg rect { stroke: #6be36b; stroke-width: 3; }
+  .rack-tile:active { cursor: grabbing; }
+
+  .hint { font-size: 12px; color: #999; margin-top: 6px; line-height: 1.45; }
+  .aiRackLine { font-family: 'Consolas', monospace; font-size: 13px; color: #ccc; }
+</style>
+</head>
+<body>
+<h1>Scrabble: You vs AI</h1>
+
+<div id="boardWrap"></div>
+
+<div id="side">
+  <div class="panel">
+    <div class="scores">
+      <span>You: <b id="score0">0</b></span>
+      <span>AI: <b id="score1">0</b></span>
+    </div>
+    <div class="aiRackLine" id="bagcount" style="margin-top:6px;"></div>
+    <div class="aiRackLine" id="airack"></div>
+  </div>
+
+  <div class="panel">
+    <button id="btnStart">Load &amp; Start New Game</button>
+  </div>
+
+  <div class="panel">
+    <div id="status">Load a game to begin.</div>
+
+    <div id="rackContainer"></div>
+
+    <button id="btnPlay" disabled>Submit Word</button>
+    <button id="btnClear" class="secondary" disabled>Recall Tiles</button>
+    <button id="btnShuffle" class="secondary" disabled>Shuffle Rack</button>
+    <button id="btnPass" class="secondary" disabled>Pass Turn</button>
+
+    <div class="hint">
+      Drag a tile from your rack onto the board (or tap a tile, then tap a
+      square) to place it. Tiles must form a single straight word with no
+      empty gaps. Tap a placed tile to pick it back up. Placing a blank
+      (?) tile will ask which letter it should represent. Drag tiles
+      within your rack to reorder them, or use Shuffle Rack to randomize
+      their order.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- constants (ported from Go) ---------- */
+
+const DIR_VERT = 0;
+const DIR_HORIZ = 1;
+
+function cti(x, y) { return y * 15 + x; }
+
+const tilePoints = new Array(256).fill(0);
+(function () {
+  const tp = { E:1,A:1,I:1,O:1,N:1,R:1,T:1,L:1,S:1,U:1,D:2,G:2,B:3,C:3,M:3,P:3,F:4,H:4,V:4,W:4,Y:4,K:5,J:8,X:8,Q:10,Z:10 };
+  for (const k in tp) tilePoints[k.charCodeAt(0)] = tp[k];
+})();
+
+const startTiles = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ**";
+
+function boolBoard(indices) {
+  const a = new Array(225).fill(false);
+  for (const i of indices) a[i] = true;
+  return a;
+}
+const tw = boolBoard([0,7,14,105,210,217,224]);
+const dw = boolBoard([16,28,32,42,48,56,64,70,112,154,160,168,176,182,192,196,208]);
+const tl = boolBoard([20,24,76,80,84,88,136,140,144,148,200,204]);
+const dl = boolBoard([3,11,36,38,45,52,59,92,96,98,102,108,122,126,128,132,165,172,179,186,188,213,221]);
+
+/* ---------- FNV-1a 64-bit hash (BigInt) ---------- */
+
+const MASK64 = (1n << 64n) - 1n;
+const FNV_PRIME = 0x100000001b3n;
+const FNV_OFFSET = 0xcbf29ce484222325n;
+
+class FNV {
+  constructor() { this.v = FNV_OFFSET; }
+  add(b) {
+    this.v = (this.v * FNV_PRIME) & MASK64;
+    this.v = this.v ^ BigInt(b & 0xDF);
+  }
+  addString(s) {
+    for (let i = 0; i < s.length; i++) {
+      this.v = (this.v * FNV_PRIME) & MASK64;
+      this.v = this.v ^ BigInt(s.charCodeAt(i));
+    }
+  }
+  val() { return this.v; }
+}
+
+/* ---------- permutations / subsets of a rack, with blank expansion ---------- */
+
+function permute(rackChars) {
+  const arr = rackChars.slice();
+  const results = [];
+  (function _permute(d) {
+    if (d === arr.length) {
+      results.push(arr.slice());
+    } else {
+      for (let i = d; i < arr.length; i++) {
+        [arr[d], arr[i]] = [arr[i], arr[d]];
+        _permute(d + 1);
+        [arr[d], arr[i]] = [arr[i], arr[d]];
+      }
+    }
+  })(0);
+
+  const subsets = new Set();
+  for (const perm of results) {
+    for (let i = 1; i <= perm.length; i++) {
+      subsets.add(String.fromCharCode(...perm.slice(0, i)));
+    }
+  }
+
+  const keys = [];
+  for (const key of subsets) {
+    if (key.length === 0) continue;
+    const starCount = (key.match(/\*/g) || []).length;
+    if (starCount === 1) {
+      const wi = key.indexOf('*');
+      for (let c = 97; c <= 122; c++) {
+        keys.push(key.slice(0, wi) + String.fromCharCode(c) + key.slice(wi + 1));
+      }
+    } else if (starCount === 0) {
+      keys.push(key);
+    }
+  }
+
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+  return keys;
+}
+
+function randPerm(n) {
+  const arr = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ---------- Board ---------- */
+
+class Board {
+  constructor() {
+    this.board = new Uint8Array(225);
+    this.wordlist = new Set();
+    this.pscore = [0, 0];
+    this.ptiles = ["", ""]; // 0 = human ("You"), 1 = AI
+    this.tiles = "";
+  }
+
+  get(x, y) { return this.board[cti(x, y)]; }
+  set(x, y, v) { this.board[cti(x, y)] = v; }
+
+  addWord(word) {
+    const f = new FNV();
+    f.addString(word.toUpperCase());
+    this.wordlist.add(f.val());
+  }
+
+  loadDictionary(text) {
+    const lines = text.split(/\r?\n/);
+    for (const line of lines) {
+      const word = line.trim();
+      if (word.length > 1) this.addWord(word);
+    }
+  }
+
+  dealTiles() {
+    const arr = Array.from(startTiles);
+    for (let i = 0; i < arr.length; i++) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    let bag = arr.join('');
+    this.ptiles[0] = bag.slice(0, 7);
+    this.ptiles[1] = bag.slice(7, 14);
+    this.tiles = bag.slice(14);
+  }
+
+  checkCenterPlayed(x, y, tiles, dir) {
+    if (this.get(7, 7) !== 0) return true;
+    if (dir === DIR_VERT) return x === 7 && y <= 7 && (y + tiles) >= 7;
+    return y === 7 && x <= 7 && (x + tiles) >= 7;
+  }
+
+  checkContiguous(x, y, tiles, dir) {
+    if (this.get(7, 7) === 0) return true;
+    if (dir === DIR_VERT) {
+      for (let i = y; tiles > 0 && i < 15; i++) {
+        if (this.get(x, i) === 0) tiles--;
+        if ((x > 0 && this.get(x - 1, i) !== 0) || (x < 14 && this.get(x + 1, i) !== 0) ||
+            (i > 0 && this.get(x, i - 1) !== 0) || (i < 14 && this.get(x, i + 1) !== 0)) return true;
+      }
+    } else {
+      for (let i = x; tiles > 0 && i < 15; i++) {
+        if (this.get(i, y) === 0) tiles--;
+        if ((i > 0 && this.get(i - 1, y) !== 0) || (i < 14 && this.get(i + 1, y) !== 0) ||
+            (y > 0 && this.get(i, y - 1) !== 0) || (y < 14 && this.get(i, y + 1) !== 0)) return true;
+      }
+    }
+    return false;
+  }
+
+  scoreWord(x, y, dir, plays) {
+    let points = 0, wordMult = 1, wordLen = 0;
+    if (dir === DIR_VERT) {
+      let y2 = y;
+      while (y2 > 0 && (plays[cti(x, y2 - 1)] !== 0 || this.get(x, y2 - 1) !== 0)) y2--;
+      for (; y2 < 15; y2++) {
+        const idx = cti(x, y2);
+        if (this.get(x, y2) !== 0) {
+          wordLen++; points += tilePoints[this.get(x, y2)];
+        } else if (plays[idx] !== 0) {
+          wordLen++;
+          points += tilePoints[plays[idx]];
+          if (dw[idx]) wordMult *= 2;
+          else if (tw[idx]) wordMult *= 3;
+          else if (dl[idx]) points += tilePoints[plays[idx]];
+          else if (tl[idx]) points += tilePoints[plays[idx]] * 2;
+        } else break;
+      }
+    } else {
+      let x2 = x;
+      while (x2 > 0 && (plays[cti(x2 - 1, y)] !== 0 || this.get(x2 - 1, y) !== 0)) x2--;
+      for (; x2 < 15; x2++) {
+        const idx = cti(x2, y);
+        if (this.get(x2, y) !== 0) {
+          wordLen++; points += tilePoints[this.get(x2, y)];
+        } else if (plays[idx] !== 0) {
+          wordLen++;
+          points += tilePoints[plays[idx]];
+          if (dw[idx]) wordMult *= 2;
+          else if (tw[idx]) wordMult *= 3;
+          else if (dl[idx]) points += tilePoints[plays[idx]];
+          else if (tl[idx]) points += tilePoints[plays[idx]] * 2;
+        } else break;
+      }
+    }
+    if (wordLen === 1) return 0;
+    return points * wordMult;
+  }
+
+  scoreMove(x, y, tilesStr, dir) {
+    let playPoints = 0, tilei = 0;
+    const plays = new Uint8Array(225);
+    if (dir === DIR_VERT) {
+      for (let i = y; tilesStr.length > tilei && i < 15; i++) {
+        if (this.get(x, i) === 0) {
+          plays[cti(x, i)] = tilesStr.charCodeAt(tilei);
+          tilei++;
+          playPoints += this.scoreWord(x, i, DIR_HORIZ, plays);
+        }
+      }
+    } else {
+      for (let i = x; tilesStr.length > tilei && i < 15; i++) {
+        if (this.get(i, y) === 0) {
+          plays[cti(i, y)] = tilesStr.charCodeAt(tilei);
+          tilei++;
+          playPoints += this.scoreWord(i, y, DIR_VERT, plays);
+        }
+      }
+    }
+    return playPoints + this.scoreWord(x, y, dir, plays);
+  }
+
+  getPlaySpace(x, y, dir) {
+    const play = [];
+    const crossPlays = [];
+    let spaces = 0;
+    if (dir === DIR_VERT) {
+      while (y > 0 && this.get(x, y - 1) !== 0) y--;
+      for (let i = y; i < 15; i++) {
+        play.push(this.get(x, i));
+        let crossPlay = null;
+        if (this.get(x, i) === 0) {
+          spaces++;
+          let x2 = x, x3 = x;
+          while (x2 > 0 && this.get(x2 - 1, i) !== 0) x2--;
+          while (x3 < 14 && this.get(x3 + 1, i) !== 0) x3++;
+          if (x2 < x3) {
+            crossPlay = [];
+            for (let j = x2; j <= x3; j++) crossPlay.push(this.get(j, i));
+          }
+        }
+        crossPlays.push(crossPlay);
+      }
+    } else {
+      while (x > 0 && this.get(x - 1, y) !== 0) x--;
+      for (let i = x; i < 15; i++) {
+        play.push(this.get(i, y));
+        let crossPlay = null;
+        if (this.get(i, y) === 0) {
+          spaces++;
+          let y2 = y, y3 = y;
+          while (y2 > 0 && this.get(i, y2 - 1) !== 0) y2--;
+          while (y3 < 14 && this.get(i, y3 + 1) !== 0) y3++;
+          if (y2 < y3) {
+            crossPlay = [];
+            for (let j = y2; j <= y3; j++) crossPlay.push(this.get(i, j));
+          }
+        }
+        crossPlays.push(crossPlay);
+      }
+    }
+    return [play, crossPlays, spaces];
+  }
+
+  play(x, y, word, dir) {
+    let wi = 0;
+    if (dir === DIR_VERT) {
+      for (let i = y; wi < word.length && i < 15; i++) {
+        if (this.get(x, i) !== 0) continue;
+        this.set(x, i, word.charCodeAt(wi));
+        wi++;
+      }
+    } else {
+      for (let i = x; wi < word.length && i < 15; i++) {
+        if (this.get(i, y) !== 0) continue;
+        this.set(i, y, word.charCodeAt(wi));
+        wi++;
+      }
+    }
+  }
+
+  static wordIsValid(wordlist, play, crossPlays, word) {
+    const f = new FNV();
+    let j = 0;
+    for (let i = 0; i < play.length; i++) {
+      const v = play[i];
+      if (v === 0) {
+        if (j === word.length) break;
+        f.add(word.charCodeAt(j));
+        if (crossPlays[i] !== null) {
+          const f2 = new FNV();
+          for (const cv of crossPlays[i]) {
+            if (cv === 0) f2.add(word.charCodeAt(j));
+            else f2.add(cv);
+          }
+          if (!wordlist.has(f2.val())) return false;
+        }
+        j++;
+      } else {
+        f.add(v);
+      }
+    }
+    return wordlist.has(f.val());
+  }
+
+  doTurn(player) {
+    let playX = 0, playY = 0, playPoints = 0, playTiles = "", playDir = DIR_HORIZ;
+    const rackChars = Array.from(this.ptiles[player]).map(c => c.charCodeAt(0));
+    const tilesets = permute(rackChars);
+
+    for (const x of randPerm(15)) {
+      for (const y of randPerm(15)) {
+        if (this.get(x, y) !== 0) continue;
+        for (const dir of [DIR_HORIZ, DIR_VERT]) {
+          const [play, crossPlays, roomRaw] = this.getPlaySpace(x, y, dir);
+          let room = roomRaw;
+          if (room > this.ptiles[player].length) room = this.ptiles[player].length;
+          for (let tilecount = 1; tilecount <= room; tilecount++) {
+            if (!this.checkCenterPlayed(x, y, tilecount, dir) || !this.checkContiguous(x, y, tilecount, dir)) continue;
+            for (const tileset of tilesets) {
+              if (tileset.length !== tilecount) continue;
+              if (!Board.wordIsValid(this.wordlist, play, crossPlays, tileset)) continue;
+              const points = this.scoreMove(x, y, tileset, dir);
+              if (points > playPoints) {
+                playX = x; playY = y; playTiles = tileset; playPoints = points; playDir = dir;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (playTiles === "") return { played: false };
+
+    this.play(playX, playY, playTiles, playDir);
+
+    let rack = this.ptiles[player];
+    for (const ch of playTiles) {
+      const code = ch.charCodeAt(0);
+      const removeChar = (code >= 97 && code <= 122) ? '*' : ch;
+      const idx = rack.indexOf(removeChar);
+      rack = rack.slice(0, idx) + rack.slice(idx + 1);
+    }
+    while (rack.length < 7 && this.tiles.length > 0) {
+      rack += this.tiles[0];
+      this.tiles = this.tiles.slice(1);
+    }
+    this.ptiles[player] = rack;
+    this.pscore[player] += playPoints;
+
+    return { played: true, tiles: playTiles, points: playPoints, x: playX, y: playY, dir: playDir };
+  }
+
+  humanPlay(word, x0, y0, dir) {
+    if (!Number.isInteger(x0) || !Number.isInteger(y0) || x0 < 0 || x0 > 14 || y0 < 0 || y0 > 14) {
+      return { ok: false, error: 'Coordinates out of range.' };
+    }
+    if (!/^[A-Za-z]+$/.test(word)) {
+      return { ok: false, error: 'Word must contain only letters.' };
+    }
+
+    const [play, crossPlays, room] = this.getPlaySpace(x0, y0, dir);
+    const tilecount = word.length;
+
+    if (tilecount > room) {
+      return { ok: false, error: 'Not enough room on the board for that placement.' };
+    }
+    if (tilecount > this.ptiles[0].length) {
+      return { ok: false, error: 'You do not have that many tiles.' };
+    }
+    if (!this.checkCenterPlayed(x0, y0, tilecount, dir)) {
+      return { ok: false, error: 'Your first word must cover the center square.' };
+    }
+    if (!this.checkContiguous(x0, y0, tilecount, dir)) {
+      return { ok: false, error: 'Word must connect to a tile already on the board.' };
+    }
+
+    const rack = this.ptiles[0].split('');
+    for (const ch of word) {
+      if (ch >= 'a' && ch <= 'z') {
+        const idx = rack.indexOf('*');
+        if (idx === -1) return { ok: false, error: `Missing a blank tile for '${ch.toUpperCase()}'.` };
+        rack.splice(idx, 1);
+      } else {
+        const idx = rack.indexOf(ch);
+        if (idx === -1) return { ok: false, error: `You don't have the letter '${ch}' in your rack.` };
+        rack.splice(idx, 1);
+      }
+    }
+
+    if (!Board.wordIsValid(this.wordlist, play, crossPlays, word)) {
+      return { ok: false, error: "Not a valid word (or a crossing word is invalid)." };
+    }
+
+    const points = this.scoreMove(x0, y0, word, dir);
+    this.play(x0, y0, word, dir);
+    this.ptiles[0] = rack.join('');
+    while (this.ptiles[0].length < 7 && this.tiles.length > 0) {
+      this.ptiles[0] += this.tiles[0];
+      this.tiles = this.tiles.slice(1);
+    }
+    this.pscore[0] += points;
+
+    return { ok: true, points, word };
+  }
+
+  playersHaveTiles() {
+    return this.ptiles[0].length > 0 && this.ptiles[1].length > 0;
+  }
+}
+
+/* ---------- tile SVG rendering ---------- */
+
+function tileMarkup(letterCode, opts) {
+  opts = opts || {};
+  const isBlankUnassigned = letterCode === 42; // '*'
+  const isBlankAssigned = letterCode >= 97 && letterCode <= 122;
+  const letter = isBlankUnassigned ? '?' : String.fromCharCode(letterCode).toUpperCase();
+  const value = isBlankUnassigned ? '' : String(tilePoints[letterCode]);
+  const fill = isBlankAssigned ? '#f4c7e3' : (isBlankUnassigned ? '#e3d3e6' : '#f4e3b2');
+  const stroke = opts.pending ? '#4aa3e0' : '#8a6d2f';
+  const strokeWidth = opts.pending ? 2.6 : 1.4;
+  const letterColor = isBlankUnassigned ? '#8a5a8a' : '#2a2723';
+  return `<svg viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="32" height="32" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"/>
+    <text x="15" y="23" font-size="16" font-weight="700" text-anchor="middle" fill="${letterColor}" font-family="Georgia, serif">${letter}</text>
+    ${value !== '' ? `<text x="30" y="30" font-size="7.5" text-anchor="end" fill="#5a4a26" font-family="Arial">${value}</text>` : ''}
+  </svg>`;
+}
+
+/* ---------- UI wiring ---------- */
+
+const boardWrap = document.getElementById('boardWrap');
+const logEl = document.getElementById('log');
+const score0El = document.getElementById('score0');
+const score1El = document.getElementById('score1');
+const bagEl = document.getElementById('bagcount');
+const airackEl = document.getElementById('airack');
+const statusEl = document.getElementById('status');
+const rackContainer = document.getElementById('rackContainer');
+
+const btnStart = document.getElementById('btnStart');
+const btnPlay = document.getElementById('btnPlay');
+const btnClear = document.getElementById('btnClear');
+const btnShuffle = document.getElementById('btnShuffle');
+const btnPass = document.getElementById('btnPass');
+
+let board = null;
+let gameOver = false;
+let consecutivePasses = 0;
+let humansTurn = false;
+
+let rackSlots = [];     // [{id, char, placed}]
+let pendingTiles = [];  // [{x, y, letter, slotId}]
+let selectedSlotId = null;
+let draggingSlotId = null;
+let slotIdCounter = 0;
+
+/* build the 225 board cell divs once */
+const cellEls = [];
+for (let y = 0; y < 15; y++) {
+  for (let x = 0; x < 15; x++) {
+    const div = document.createElement('div');
+    div.className = 'cell';
+    const idx = cti(x, y);
+    if (x === 7 && y === 7) div.classList.add('center');
+    else if (tw[idx]) div.classList.add('tw');
+    else if (dw[idx]) div.classList.add('dw');
+    else if (tl[idx]) div.classList.add('tl');
+    else if (dl[idx]) div.classList.add('dl');
+
+    div.addEventListener('click', () => onCellClick(x, y));
+    div.addEventListener('dragover', (e) => {
+      if (humansTurn && canDropAt(x, y)) e.preventDefault();
+    });
+    div.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (!humansTurn || draggingSlotId === null) return;
+      placeTileAt(draggingSlotId, x, y);
+      draggingSlotId = null;
+    });
+
+    boardWrap.appendChild(div);
+    cellEls[idx] = div;
+  }
+}
+
+rackContainer.addEventListener('dragover', (e) => {
+  if (draggingSlotId !== null) e.preventDefault();
+});
+rackContainer.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (draggingSlotId === null) return;
+  moveRackTileToEnd(draggingSlotId);
+  draggingSlotId = null;
+});
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function canDropAt(x, y) {
+  if (!board) return false;
+  if (board.get(x, y) !== 0) return false;
+  return !pendingTiles.some(t => t.x === x && t.y === y);
+}
+
+function placeTileAt(slotId, x, y) {
+  if (!canDropAt(x, y)) return;
+  const slot = rackSlots.find(s => s.id === slotId);
+  if (!slot || slot.placed) return;
+  let letter = slot.char;
+  if (letter === '*') {
+    let chosen = prompt("This is a blank tile. Which letter should it represent? (A-Z)");
+    if (!chosen) return;
+    chosen = chosen.trim().toUpperCase();
+    if (!/^[A-Z]$/.test(chosen)) { alert('Please enter a single letter A-Z.'); return; }
+    letter = chosen.toLowerCase(); // lowercase marks a blank-assigned letter
+  }
+  slot.placed = true;
+  pendingTiles.push({ x, y, letter, slotId });
+  selectedSlotId = null;
+  render();
+}
+
+function onCellClick(x, y) {
+  if (!humansTurn) return;
+  const pend = pendingTiles.find(t => t.x === x && t.y === y);
+  if (pend) {
+    const slot = rackSlots.find(s => s.id === pend.slotId);
+    if (slot) slot.placed = false;
+    pendingTiles = pendingTiles.filter(t => t !== pend);
+    render();
+    return;
+  }
+  if (selectedSlotId !== null) {
+    placeTileAt(selectedSlotId, x, y);
+  }
+}
+
+function rebuildRackSlots() {
+  rackSlots = Array.from(board.ptiles[0]).map(ch => ({ id: slotIdCounter++, char: ch, placed: false }));
+  pendingTiles = [];
+  selectedSlotId = null;
+}
+
+// Move the tile with id `fromId` to just before the tile with id `toId`.
+function reorderRack(fromId, toId) {
+  const fromIdx = rackSlots.findIndex(s => s.id === fromId);
+  let toIdx = rackSlots.findIndex(s => s.id === toId);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+  const [moved] = rackSlots.splice(fromIdx, 1);
+  if (fromIdx < toIdx) toIdx -= 1;
+  rackSlots.splice(toIdx, 0, moved);
+  render();
+}
+
+function moveRackTileToEnd(fromId) {
+  const fromIdx = rackSlots.findIndex(s => s.id === fromId);
+  if (fromIdx === -1) return;
+  const [moved] = rackSlots.splice(fromIdx, 1);
+  rackSlots.push(moved);
+  render();
+}
+
+function shuffleRack() {
+  for (let i = rackSlots.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [rackSlots[i], rackSlots[j]] = [rackSlots[j], rackSlots[i]];
+  }
+  render();
+}
+
+function computeMove() {
+  if (pendingTiles.length === 0) return { error: 'No tiles placed.' };
+  let dir;
+  if (pendingTiles.length === 1) {
+    dir = DIR_HORIZ;
+  } else {
+    const uniqueXs = new Set(pendingTiles.map(t => t.x));
+    const uniqueYs = new Set(pendingTiles.map(t => t.y));
+    if (uniqueXs.size === 1 && uniqueYs.size > 1) dir = DIR_VERT;
+    else if (uniqueYs.size === 1 && uniqueXs.size > 1) dir = DIR_HORIZ;
+    else return { error: 'Tiles must all be in a single row or column.' };
+  }
+  const sorted = pendingTiles.slice().sort((a, b) => dir === DIR_VERT ? a.y - b.y : a.x - b.x);
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i], b = sorted[i + 1];
+    if (dir === DIR_VERT) {
+      for (let yy = a.y + 1; yy < b.y; yy++) {
+        if (board.get(a.x, yy) === 0) return { error: 'Tiles must be contiguous, with no empty gaps.' };
+      }
+    } else {
+      for (let xx = a.x + 1; xx < b.x; xx++) {
+        if (board.get(xx, a.y) === 0) return { error: 'Tiles must be contiguous, with no empty gaps.' };
+      }
+    }
+  }
+  const word = sorted.map(t => t.letter).join('');
+  return { word, x0: sorted[0].x, y0: sorted[0].y, dir };
+}
+
+function render() {
+  for (let y = 0; y < 15; y++) {
+    for (let x = 0; x < 15; x++) {
+      const idx = cti(x, y);
+      const el = cellEls[idx];
+      const committed = board ? board.get(x, y) : 0;
+      const pend = pendingTiles.find(t => t.x === x && t.y === y);
+      el.classList.remove('has-tile', 'empty-interactive');
+      if (committed !== 0) {
+        el.innerHTML = tileMarkup(committed, { pending: false });
+        el.classList.add('has-tile');
+      } else if (pend) {
+        el.innerHTML = tileMarkup(pend.letter.charCodeAt(0), { pending: true });
+        el.classList.add('has-tile');
+        if (humansTurn) el.classList.add('empty-interactive');
+      } else {
+        el.innerHTML = '';
+        if (humansTurn) el.classList.add('empty-interactive');
+      }
+    }
+  }
+
+  rackContainer.innerHTML = '';
+  rackSlots.forEach((slot) => {
+    if (slot.placed) return;
+    const div = document.createElement('div');
+    div.className = 'rack-tile' + (selectedSlotId === slot.id ? ' selected' : '');
+    div.draggable = true;
+    div.innerHTML = tileMarkup(slot.char.charCodeAt(0));
+
+    div.addEventListener('dragstart', () => { draggingSlotId = slot.id; });
+    div.addEventListener('dragend', () => { draggingSlotId = null; });
+    div.addEventListener('dragover', (e) => {
+      if (draggingSlotId !== null) e.preventDefault();
+    });
+    div.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (draggingSlotId === null) return;
+      if (draggingSlotId !== slot.id) reorderRack(draggingSlotId, slot.id);
+      draggingSlotId = null;
+    });
+    div.addEventListener('click', () => {
+      if (!humansTurn) return;
+      selectedSlotId = (selectedSlotId === slot.id) ? null : slot.id;
+      render();
+    });
+    rackContainer.appendChild(div);
+  });
+
+  score0El.textContent = board ? board.pscore[0] : 0;
+  score1El.textContent = board ? board.pscore[1] : 0;
+  bagEl.textContent = board ? ('Tiles remaining in bag: ' + board.tiles.length) : '';
+  airackEl.textContent = board ? ('AI has ' + board.ptiles[1].length + ' tiles') : '';
+
+  btnPlay.disabled = !humansTurn || pendingTiles.length === 0;
+  btnClear.disabled = !humansTurn || pendingTiles.length === 0;
+  btnShuffle.disabled = !humansTurn || rackSlots.every(s => s.placed);
+  btnPass.disabled = !humansTurn;
+  rackContainer.classList.toggle('disabled', !humansTurn);
+}
+
+function setHumanControlsEnabled(enabled) {
+  humansTurn = enabled;
+  render();
+}
+
+async function startGame() {
+  btnStart.disabled = true;
+  humansTurn = false;
+  logEl.innerHTML = '';
+  statusEl.textContent = 'Loading dictionary...';
+  log('Loading dictionary.txt ...');
+
+  let text;
+  try {
+    const resp = await fetch('dictionary.txt');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    text = await resp.text();
+  } catch (e) {
+    log('Failed to load dictionary.txt: ' + e.message, 'err');
+    log('This page must be served over http(s) (not opened as a local file://) for fetch() to work, and dictionary.txt must be in the same folder.', 'err');
+    statusEl.textContent = 'Failed to load. See log.';
+    btnStart.disabled = false;
+    return;
+  }
+
+  board = new Board();
+  board.loadDictionary(text);
+  board.dealTiles();
+  gameOver = false;
+  consecutivePasses = 0;
+  rebuildRackSlots();
+
+  log(`Dictionary loaded: ${board.wordlist.size} words.`, 'info');
+  log('Game started. Your move!', 'info');
+
+  btnStart.disabled = false;
+  statusEl.textContent = 'Your turn.';
+  setHumanControlsEnabled(true);
+}
+
+function checkGameOver() {
+  if (!board.playersHaveTiles()) {
+    gameOver = true;
+    statusEl.textContent = 'Game over!';
+    log('Game over: a player is out of tiles.', 'info');
+    log(`Final score — You: ${board.pscore[0]}, AI: ${board.pscore[1]}`, 'info');
+    return true;
+  }
+  if (consecutivePasses >= 2 && board.tiles.length === 0) {
+    gameOver = true;
+    statusEl.textContent = 'Game over!';
+    log('Game over: both players passed with an empty tile bag.', 'info');
+    log(`Final score — You: ${board.pscore[0]}, AI: ${board.pscore[1]}`, 'info');
+    return true;
+  }
+  return false;
+}
+
+async function aiTurn() {
+  statusEl.textContent = 'AI is thinking...';
+  setHumanControlsEnabled(false);
+  await new Promise(r => setTimeout(r, 400));
+
+  const result = board.doTurn(1);
+  if (!result.played) {
+    log('AI: no word found - passing.', 'pass');
+    consecutivePasses++;
+  } else {
+    consecutivePasses = 0;
+    log(`AI plays "${result.tiles.toUpperCase()}" for ${result.points} points.`);
+  }
+  render();
+
+  if (checkGameOver()) return;
+  statusEl.textContent = 'Your turn.';
+  setHumanControlsEnabled(true);
+}
+
+btnStart.addEventListener('click', startGame);
+
+btnPlay.addEventListener('click', async () => {
+  if (!board || gameOver || !humansTurn) return;
+  const move = computeMove();
+  if (move.error) {
+    log('Move rejected: ' + move.error, 'err');
+    return;
+  }
+  const result = board.humanPlay(move.word, move.x0, move.y0, move.dir);
+  if (!result.ok) {
+    log('Move rejected: ' + result.error, 'err');
+    return;
+  }
+  consecutivePasses = 0;
+  log(`You play "${result.word.toUpperCase()}" for ${result.points} points.`);
+  rebuildRackSlots();
+  render();
+  if (checkGameOver()) return;
+  await aiTurn();
+});
+
+btnClear.addEventListener('click', () => {
+  if (!humansTurn) return;
+  for (const s of rackSlots) s.placed = false;
+  pendingTiles = [];
+  selectedSlotId = null;
+  render();
+});
+
+btnShuffle.addEventListener('click', () => {
+  if (!humansTurn) return;
+  shuffleRack();
+});
+
+btnPass.addEventListener('click', async () => {
+  if (!board || gameOver || !humansTurn) return;
+  for (const s of rackSlots) s.placed = false;
+  pendingTiles = [];
+  selectedSlotId = null;
+  log('You pass.', 'pass');
+  consecutivePasses++;
+  render();
+  if (checkGameOver()) return;
+  await aiTurn();
+});
+
+render();
+</script>
+</body>
+</html>

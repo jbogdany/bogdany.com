@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="chat-shortcut.js"></script>
+<title>Commands — bogdany.com</title>
+<style>
+  :root {
+    --face: #c0c0c0;
+    --face-dark: #808080;
+    --face-darker: #404040;
+    --face-light: #ffffff;
+    --face-lighter: #dfdfdf;
+    --titlebar1: #000080;
+    --titlebar2: #1084d0;
+    --desktop: #008080;
+    --selected: #000080;
+    --selected-text: #ffffff;
+    --tile-w: 84px;
+    --glyph-size: 40px;
+    --tap-pad: 3px 10px;
+    --tap-font: 12px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background: var(--desktop);
+    font-family: Tahoma, "Segoe UI", Verdana, Arial, sans-serif;
+    font-size: 13px;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: 20px;
+    touch-action: manipulation;
+  }
+
+  /* classic beveled panels */
+  .raised {
+    background: var(--face);
+    box-shadow:
+      inset 1px 1px 0 var(--face-lighter),
+      inset -1px -1px 0 var(--face-darker),
+      inset 2px 2px 0 var(--face-light),
+      inset -2px -2px 0 var(--face-dark);
+  }
+  .sunken {
+    background: var(--face);
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-light),
+      inset 2px 2px 0 var(--face-dark),
+      inset -2px -2px 0 var(--face-lighter);
+  }
+  .flat-border {
+    box-shadow:
+      inset 1px 1px 0 var(--face-lighter),
+      inset -1px -1px 0 var(--face-darker);
+  }
+
+  #window {
+    width: min(760px, 100%);
+    height: min(560px, 92vh);
+    background: var(--face);
+    box-shadow:
+      inset 1px 1px 0 var(--face-lighter),
+      inset -1px -1px 0 var(--face-darker),
+      2px 2px 6px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    padding: 3px;
+  }
+
+  .titlebar {
+    background: linear-gradient(90deg, var(--titlebar1), var(--titlebar2));
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 4px 3px 6px;
+    font-weight: bold;
+    font-size: 13px;
+    flex: none;
+  }
+  .titlebar .title { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .titlebar .capicon { width: 16px; height: 16px; flex: none; }
+  .titlebar .capbuttons { display: flex; gap: 3px; flex: none; }
+  .capbtn {
+    width: 18px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--face);
+    box-shadow:
+      inset 1px 1px 0 var(--face-lighter),
+      inset -1px -1px 0 var(--face-darker);
+    color: #000;
+    font-size: 11px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    font-family: Tahoma, sans-serif;
+  }
+  .capbtn:active {
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-lighter);
+  }
+
+  .menubar {
+    display: flex;
+    gap: 2px;
+    padding: 2px 4px;
+    flex: none;
+  }
+  .menubar span {
+    padding: 4px 10px;
+    cursor: default;
+  }
+  .menubar span:hover, .menubar span:active { background: var(--selected); color: var(--selected-text); }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 5px;
+    flex: none;
+    flex-wrap: wrap;
+  }
+  .toolbtn {
+    padding: var(--tap-pad);
+    cursor: pointer;
+    user-select: none;
+    font-size: var(--tap-font);
+    background: var(--face);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .toolbtn.disabled { color: var(--face-dark); cursor: default; }
+  .toolbtn:not(.disabled):hover {
+    box-shadow:
+      inset 1px 1px 0 var(--face-lighter),
+      inset -1px -1px 0 var(--face-darker);
+  }
+  .toolbtn:not(.disabled):active {
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-lighter);
+  }
+
+  .addressbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 5px 4px 5px;
+    padding: 2px 6px;
+    flex: none;
+    font-size: 12px;
+  }
+  .addressbar .lbl { flex: none; }
+  .addressbar .path {
+    flex: 1;
+    background: #fff;
+    padding: 4px 6px;
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-light);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .addressbar .crumb { cursor: pointer; padding: 2px 1px; }
+  .addressbar .crumb:hover { text-decoration: underline; }
+  .addressbar .sep { color: var(--face-dark); margin: 0 3px; }
+
+  #content {
+    flex: 1;
+    margin: 0 5px 5px 5px;
+    background: #fff;
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-light);
+    overflow-y: auto;
+    padding: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--tile-w), 1fr));
+    gap: 6px;
+    align-content: start;
+  }
+  .icon-item {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 8px 3px;
+    cursor: pointer;
+    border: 1px dotted transparent;
+    border-radius: 2px;
+  }
+  .icon-item .glyph { width: var(--glyph-size); height: var(--glyph-size); flex: none; }
+  .icon-item .lbl {
+    margin-top: 5px;
+    font-size: 11.5px;
+    line-height: 1.3;
+    color: #000;
+    padding: 1px 3px;
+    word-break: break-word;
+  }
+  .icon-item:hover { border: 1px dotted #888; }
+  .icon-item:active, .icon-item.pressed {
+    background: var(--selected);
+    border-radius: 2px;
+  }
+  .icon-item:active .lbl, .icon-item.pressed .lbl { background: var(--selected); color: var(--selected-text); }
+  .icon-item:focus-visible { outline: 2px dotted #000; outline-offset: -2px; }
+
+  .statusbar {
+    display: flex;
+    gap: 6px;
+    flex: none;
+    padding: 4px 4px 0 4px;
+  }
+  .statusbar .seg {
+    flex: 1;
+    padding: 3px 8px;
+    font-size: 12px;
+    box-shadow:
+      inset 1px 1px 0 var(--face-darker),
+      inset -1px -1px 0 var(--face-light);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .statusbar .seg.grow { flex: 2; }
+
+  /* ---------- mobile: bigger tap targets, tighter chrome padding ---------- */
+  @media (max-width: 640px), (pointer: coarse) {
+    :root {
+      --tile-w: 108px;
+      --glyph-size: 54px;
+      --tap-pad: 9px 14px;
+      --tap-font: 14px;
+    }
+    body { padding: 8px; font-size: 14px; }
+    #window { height: min(560px, 95vh); }
+    .capbtn { width: 34px; height: 30px; font-size: 15px; }
+    .titlebar .capicon { width: 18px; height: 18px; }
+    .menubar span { padding: 8px 12px; font-size: 14px; }
+    #grid { gap: 10px; }
+    .icon-item { padding: 10px 4px; }
+    .icon-item .lbl { font-size: 12.5px; }
+    .addressbar .path, .statusbar .seg { padding: 6px 8px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="window" class="raised">
+  <div class="titlebar">
+    <div class="title">
+      <svg class="capicon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="3" width="14" height="11" fill="#ffd452" stroke="#8a6a00" stroke-width="0.6"/>
+        <rect x="1" y="3" width="6" height="2.4" fill="#ffe28a" stroke="#8a6a00" stroke-width="0.6"/>
+      </svg>
+      <span id="titleText">Commands</span>
+    </div>
+    <div class="capbuttons">
+      <div class="capbtn" title="Minimize">_</div>
+      <div class="capbtn" title="Maximize">&#9633;</div>
+      <div class="capbtn" id="btnClose" title="Close">&#10005;</div>
+    </div>
+  </div>
+
+  <div class="menubar flat-border">
+    <span id="menuHelp">Help</span>
+  </div>
+
+  <div class="toolbar flat-border">
+    <div class="toolbtn" id="btnBack">&#8592; Back</div>
+    <div class="toolbtn" id="btnUp">&#8593; Up</div>
+    <div class="toolbtn" id="btnHome">&#8962; Home</div>
+  </div>
+
+  <div class="addressbar sunken">
+    <span class="lbl">Address:</span>
+    <div class="path" id="pathBar"></div>
+  </div>
+
+  <div id="content" class="sunken">
+    <div id="grid"></div>
+  </div>
+
+  <div class="statusbar">
+    <div class="seg grow" id="statusDesc">Tap an item to open it.</div>
+    <div class="seg" id="statusCount"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- icon SVGs ---------- */
+
+function folderSVG() {
+  return `<svg viewBox="0 0 48 40" xmlns="http://www.w3.org/2000/svg">
+    <path d="M2 8 Q2 6 4 6 L18 6 L22 10 L44 10 Q46 10 46 12 L46 34 Q46 36 44 36 L4 36 Q2 36 2 34 Z"
+          fill="#ffd452" stroke="#8a6a00" stroke-width="1.2"/>
+    <path d="M2 8 Q2 6 4 6 L18 6 L22 10 L4 10 Q2 10 2 12 Z" fill="#ffe28a" stroke="#8a6a00" stroke-width="1"/>
+  </svg>`;
+}
+
+function docSVG(emoji) {
+  return `<svg viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6 2 H25 L34 11 V44 H6 Z" fill="#ffffff" stroke="#5a5a5a" stroke-width="1.2"/>
+    <path d="M25 2 L25 11 L34 11 Z" fill="#dcdcdc" stroke="#5a5a5a" stroke-width="1"/>
+    <text x="20" y="31" font-size="17" text-anchor="middle">${emoji}</text>
+  </svg>`;
+}
+
+/* ---------- command tree ---------- */
+
+function folder(label, desc, children) {
+  return { type: "folder", label: label, desc: desc, children: children };
+}
+function run(label, icon, cmd, desc) {
+  return { type: "run", label: label, icon: icon, cmd: cmd, desc: desc || ("runs: " + cmd) };
+}
+function prompt_(label, icon, promptText, buildCmd, opts) {
+  opts = opts || {};
+  return {
+    type: "prompt", label: label, icon: icon, promptText: promptText,
+    buildCmd: buildCmd, defaultValue: opts.defaultValue || "",
+    allowEmpty: !!opts.allowEmpty, desc: opts.desc || (label + "\u2026 (asks for one more detail)")
+  };
+}
+
+const TREE = folder("Commands", "Everything the terminal at bogdany.com can do, grouped by category.", [
+
+  folder("Games", "Board and arcade games — open straight into the terminal's game window.", [
+    run("Blackjack", "\uD83C\uDCCF", "blackjack"),
+    run("Chess", "\u265F\uFE0F", "chess"),
+    run("Connect Four", "\uD83D\uDD34", "c4"),
+    run("Go", "\u26AB", "go"),
+    run("Jeopardy", "\u2753", "jeopardy"),
+    run("Mahjong", "\uD83C\uDC04", "mahjong"),
+    run("Mancala", "\uD83C\uDF30", "mancala"),
+    run("Jigsaw Puzzle", "\uD83E\uDDE9", "puzzle"),
+    run("Reversi", "\u26AA", "reversi"),
+    run("Scrabble", "\uD83D\uDD24", "scrabble"),
+    run("Snake", "\uD83D\uDC0D", "snake"),
+    run("Solitaire", "\uD83C\uDCCF", "solitaire"),
+    run("Sudoku", "\uD83D\uDD22", "sudoku"),
+    run("Suzen", "\uD83C\uDFB2", "suzen"),
+    run("Tetris", "\uD83D\uDFE6", "tetris"),
+    run("Yahtzee", "\uD83C\uDFB2", "yahtzee")
+  ]),
+
+  folder("Media", "Radio and video.", [
+    folder("Radio", "Internet radio — presets, search, and volume.", [
+      run("Browse Stations", "\uD83D\uDCFB", "radio", "lists the current station presets"),
+      run("Groove Salad", "\uD83C\uDFB5", "radio groove salad"),
+      run("Drone Zone", "\uD83C\uDFB5", "radio drone zone"),
+      run("DEF CON Radio", "\uD83C\uDFB5", "radio def con radio"),
+      run("Secret Agent", "\uD83C\uDFB5", "radio secret agent"),
+      run("Underground 80s", "\uD83C\uDFB5", "radio underground 80s"),
+      run("Vaporwaves", "\uD83C\uDFB5", "radio vaporwaves"),
+      prompt_("Search Stations", "\uD83D\uDD0E", "Search for a station (radio-browser.info):",
+        function (v) { return "radio search " + v; }),
+      prompt_("Set Volume", "\uD83D\uDD0A", "Volume, 0-100:",
+        function (v) { return "radio vol " + v; }, { defaultValue: "80" }),
+      run("Stop", "\u23F9\uFE0F", "radio stop")
+    ]),
+    folder("YouTube", "Search and watch videos.", [
+      run("Open YouTube", "\u25B6\uFE0F", "youtube"),
+      prompt_("Search YouTube", "\uD83D\uDD0E", "Search query:",
+        function (v) { return "youtube " + v; })
+    ])
+  ]),
+
+  folder("Appearance", "Change how the terminal looks.", [
+    folder("Text Color", "Presets, or pick a custom color.", [
+      run("Amber (default)", "\uD83D\uDFE0", "color amber"),
+      run("Green", "\uD83D\uDFE2", "color green"),
+      run("Cyan", "\uD83D\uDD35", "color cyan"),
+      run("Violet", "\uD83D\uDFE3", "color violet"),
+      run("Rose", "\uD83C\uDF38", "color rose"),
+      run("White", "\u26AA", "color white"),
+      run("Reset", "\u21A9\uFE0F", "color reset"),
+      prompt_("Custom Hex Color", "\uD83C\uDFA8", "Hex color, e.g. ff11dd:",
+        function (v) { return "color hex " + v.replace("#", ""); })
+    ]),
+    folder("Background Color", "The color behind the terminal text.", [
+      run("Black (default)", "\u26AB", "bgcolor black"),
+      run("Navy", "\uD83D\uDD35", "bgcolor navy"),
+      run("Forest", "\uD83D\uDFE2", "bgcolor forest"),
+      run("Maroon", "\uD83D\uDD34", "bgcolor maroon"),
+      run("Slate", "\u26AA", "bgcolor slate"),
+      run("Plum", "\uD83D\uDFE3", "bgcolor plum"),
+      run("Reset", "\u21A9\uFE0F", "bgcolor reset"),
+      prompt_("Custom Hex Color", "\uD83C\uDFA8", "Hex color, e.g. 101018:",
+        function (v) { return "bgcolor hex " + v.replace("#", ""); })
+    ]),
+    folder("Background Image", "A photo behind the terminal, dimmed for readability.", [
+      run("Image 1", "\uD83D\uDDBC\uFE0F", "bg 1"),
+      run("Image 2", "\uD83D\uDDBC\uFE0F", "bg 2"),
+      run("Image 3", "\uD83D\uDDBC\uFE0F", "bg 3"),
+      run("Image 4", "\uD83D\uDDBC\uFE0F", "bg 4"),
+      run("Image 5", "\uD83D\uDDBC\uFE0F", "bg 5"),
+      prompt_("Custom URL or File", "\uD83C\uDF10", "Image URL, or a filename in this site's folder:",
+        function (v) { return "background " + v; }),
+      run("Random", "\uD83C\uDFB2", "background reset"),
+      run("Clear", "\uD83D\uDEAB", "background clear")
+    ])
+  ]),
+
+  folder("Chat", "The sitewide chat panel (Ctrl+/ toggles it from anywhere, including mid-game).", [
+    run("Status", "\uD83D\uDCAC", "chat", "shows whether the notification sound is on"),
+    run("Sound On", "\uD83D\uDD0A", "chat sound on"),
+    run("Sound Off", "\uD83D\uDD07", "chat sound off")
+  ]),
+
+  folder("System", "Info and utility commands.", [
+    run("Welcome Message", "\uD83D\uDCDC", "motd"),
+    run("Uptime", "\u23F1\uFE0F", "uptime"),
+    run("Mail Info", "\u2709\uFE0F", "mail"),
+    prompt_("Whois Lookup", "\uD83C\uDF10", "Domain to look up (blank = bogdany.com):",
+      function (v) { return v ? "whois " + v : "whois"; },
+      { allowEmpty: true, defaultValue: "bogdany.com" }),
+    folder("Command History", "Your last 20 commands, stored in this browser.", [
+      run("View History", "\uD83D\uDCDC", "history"),
+      run("Clear History", "\uD83D\uDDD1\uFE0F", "history clear")
+    ]),
+    folder("Cookie Consent", "Controls whether any of this is remembered between visits.", [
+      run("Status", "\uD83C\uDF6A", "cookies"),
+      run("Accept", "\u2705", "cookies accept"),
+      run("Decline", "\u274C", "cookies decline"),
+      run("Clear Choice", "\uD83D\uDD01", "cookies clear", "forget your accept/decline choice — asks again")
+    ]),
+    run("Delete All Cookies", "\uD83D\uDDD1\uFE0F", "delete-cookies", "wipes every saved setting — cannot be undone"),
+    run("Clear Screen", "\uD83E\uDDF9", "clear")
+  ]),
+
+  folder("Misc", "A few dead ends, on purpose.", [
+    run("ls", "\uD83D\uDCC2", "ls"),
+    run("sudo", "\uD83D\uDD12", "sudo"),
+    run("whoami", "\uD83D\uDE4B", "whoami"),
+    run("pwd", "\uD83D\uDCCD", "pwd"),
+    run("exit", "\uD83D\uDEAA", "exit"),
+    run("gui", "\uD83D\uDDD6\uFE0F", "gui", "reopens this command browser")
+  ])
+]);
+
+/* ---------- navigation state ---------- */
+
+let pathStack = [TREE];
+
+const grid = document.getElementById("grid");
+const pathBar = document.getElementById("pathBar");
+const statusDesc = document.getElementById("statusDesc");
+const statusCount = document.getElementById("statusCount");
+const titleText = document.getElementById("titleText");
+const btnBack = document.getElementById("btnBack");
+const btnUp = document.getElementById("btnUp");
+
+function currentFolder() { return pathStack[pathStack.length - 1]; }
+
+function launch(cmd) {
+  if (window.parent && window.parent !== window) {
+    // embedded inside index.htm's game window — run it right there
+    window.parent.postMessage({ type: "bogdany-run", cmd: cmd }, "*");
+  } else {
+    // opened on its own — navigate this same tab, no new window
+    window.location.href = "index.htm?run=" + encodeURIComponent(cmd);
+  }
+}
+
+function activate(node) {
+  if (node.type === "folder") {
+    pathStack.push(node);
+    render();
+    return;
+  }
+  if (node.type === "run") {
+    launch(node.cmd);
+    return;
+  }
+  if (node.type === "prompt") {
+    const val = window.prompt(node.promptText, node.defaultValue || "");
+    if (val === null) return;
+    const trimmed = val.trim();
+    if (!trimmed && !node.allowEmpty) return;
+    launch(node.buildCmd(trimmed));
+    return;
+  }
+}
+
+function render() {
+  const folderNode = currentFolder();
+  titleText.textContent = folderNode.label + " - Commands";
+  statusDesc.textContent = folderNode.desc || "";
+
+  // breadcrumb address bar
+  pathBar.innerHTML = "";
+  pathStack.forEach(function (node, i) {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "sep";
+      sep.textContent = "\u203A";
+      pathBar.appendChild(sep);
+    }
+    const crumb = document.createElement("span");
+    crumb.className = "crumb";
+    crumb.textContent = node.label;
+    crumb.addEventListener("click", function () {
+      pathStack = pathStack.slice(0, i + 1);
+      render();
+    });
+    pathBar.appendChild(crumb);
+  });
+
+  btnBack.classList.toggle("disabled", pathStack.length <= 1);
+  btnUp.classList.toggle("disabled", pathStack.length <= 1);
+
+  // icon grid — a tap/click activates immediately (mobile-friendly: no
+  // double-tap required); keyboard users can Tab to an item and press
+  // Enter or Space to do the same.
+  grid.innerHTML = "";
+  folderNode.children.forEach(function (node) {
+    const item = document.createElement("div");
+    item.className = "icon-item";
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    item.setAttribute("aria-label", node.label);
+
+    const glyph = document.createElement("div");
+    glyph.className = "glyph";
+    glyph.innerHTML = node.type === "folder" ? folderSVG() : docSVG(node.icon || "\u25B6");
+    item.appendChild(glyph);
+
+    const lbl = document.createElement("div");
+    lbl.className = "lbl";
+    lbl.textContent = node.label;
+    item.appendChild(lbl);
+
+    item.addEventListener("mouseenter", function () { statusDesc.textContent = node.desc || node.label; });
+    item.addEventListener("focus", function () { statusDesc.textContent = node.desc || node.label; });
+    item.addEventListener("click", function () { activate(node); });
+    item.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(node); }
+    });
+
+    grid.appendChild(item);
+  });
+
+  statusCount.textContent = folderNode.children.length + " item(s)";
+}
+
+btnBack.addEventListener("click", function () {
+  if (pathStack.length > 1) { pathStack.pop(); render(); }
+});
+btnUp.addEventListener("click", function () {
+  if (pathStack.length > 1) { pathStack.pop(); render(); }
+});
+document.getElementById("btnHome").addEventListener("click", function () {
+  pathStack = [TREE];
+  render();
+});
+document.getElementById("btnClose").addEventListener("click", function () {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: "bogdany-close" }, "*");
+  } else {
+    window.location.href = "index.htm";
+  }
+});
+document.getElementById("menuHelp").addEventListener("click", function () {
+  alert("Tap (or click) an item to open it right away — folders open into their contents, commands run in the terminal behind this window. Items that need one more detail — a search term, a domain, a color — will ask for it first.\n\nUse Back / Up / Home to navigate, or tap a breadcrumb in the address bar to jump straight there.");
+});
+
+render();
+</script>
+</body>
+</html>

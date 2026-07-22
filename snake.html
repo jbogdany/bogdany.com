@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>snake — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+    --cell: min(4.6vw, 22px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 8px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  .wrap { max-width: 520px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 2px 10px;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header .dim { color: var(--amber-dim); }
+
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    padding: 2px;
+  }
+  button:hover, button:focus-visible { color: var(--amber); outline: none; }
+  button:focus-visible { text-decoration: underline; }
+
+  .boardbox { display: flex; justify-content: center; }
+  .board {
+    display: grid;
+    border: 1px solid var(--amber-faint);
+    box-shadow: 0 0 14px rgba(255, 176, 0, 0.12);
+    position: relative;
+  }
+  .cell { width: var(--cell); height: var(--cell); }
+  .seg {
+    background: radial-gradient(circle at 35% 30%, #ffd980, var(--amber) 65%, #b87e1e 100%);
+    border-radius: 3px;
+    box-shadow: 0 0 5px var(--glow);
+  }
+  .seg.head { background: radial-gradient(circle at 35% 30%, #fff2c9, var(--amber) 55%, #b87e1e 100%); box-shadow: 0 0 8px var(--glow); }
+  .food {
+    background: radial-gradient(circle at 35% 30%, #ff9c80, var(--red) 65%, #b83a22 100%);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--glow-red);
+  }
+
+  .status {
+    text-align: center;
+    padding: 8px 0 4px;
+    min-height: 2.2em;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .status .dim { color: var(--amber-dim); }
+  .status .red { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: repeat(2, 40px);
+    gap: 6px;
+    justify-content: center;
+    margin: 8px auto 4px;
+  }
+  .dpad button {
+    border: 1px solid var(--amber-faint);
+    border-radius: 6px;
+    font-size: 1.1em;
+  }
+  .dpad button:hover { border-color: var(--amber); }
+  .dpad .up { grid-column: 2; grid-row: 1; }
+  .dpad .left { grid-column: 1; grid-row: 2; }
+  .dpad .down { grid-column: 2; grid-row: 2; }
+  .dpad .right { grid-column: 3; grid-row: 2; }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 520px;
+    margin: 0 auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.85em;
+  }
+  .statusbar a { color: var(--amber-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--amber); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 11, 7, 0.94);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .overlay h2 { margin-bottom: 12px; letter-spacing: 0.02em; }
+  .overlay li {
+    color: var(--amber-dim);
+    margin-bottom: 9px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+  .overlay .close-row { text-align: center; margin-top: 16px; }
+  .overlay button { color: var(--amber); font-size: 1.05em; }
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <span>guest@bogdany:~$ <span class="dim">snake</span></span>
+    <span class="btns">
+      <button id="btn-rules">[rules]</button>
+      <button id="btn-lvl">[lvl: 2]</button>
+      <button id="btn-pause">[pause]</button>
+      <button id="btn-new">[new]</button>
+    </span>
+  </header>
+
+  <div class="boardbox"><div class="board" id="board"></div></div>
+  <div class="status" id="status"></div>
+
+  <div class="dpad" id="dpad">
+    <button class="up" id="btn-up" aria-label="up">[\u2191]</button>
+    <button class="left" id="btn-left" aria-label="left">[\u2190]</button>
+    <button class="down" id="btn-down" aria-label="down">[\u2193]</button>
+    <button class="right" id="btn-right" aria-label="right">[\u2192]</button>
+  </div>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.html">bogdany.com</a></span>
+  <span id="stat-score">score 0</span>
+  <span id="stat-best">best 0</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>snake &mdash; rules</h2>
+    <ul>
+      <li>Steer with the arrow keys, WASD, the on-screen buttons, or a swipe on the board.</li>
+      <li>Eating a piece of food grows the snake by one segment and adds to your score.</li>
+      <li>The snake speeds up gradually as it grows &mdash; the further you get, the faster it moves.</li>
+      <li>Running into a wall or into your own body ends the run.</li>
+      <li>You can't reverse directly into yourself &mdash; a turn has to go left or right of your current direction.</li>
+      <li>[pause] freezes the action (also bound to the spacebar) if you need a break.</li>
+    </ul>
+    <div class="close-row"><button id="btn-rules-close">[resume]</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var COLS = 18, ROWS = 18;
+  var LEVEL_SPEED = { 1: 180, 2: 130, 3: 90 };
+  var MIN_SPEED = 55;
+
+  var boardEl = document.getElementById("board");
+  var statusEl = document.getElementById("status");
+  var statScore = document.getElementById("stat-score");
+  var statBest = document.getElementById("stat-best");
+  var btnLvl = document.getElementById("btn-lvl");
+  var btnPause = document.getElementById("btn-pause");
+
+  var cellEls = [];
+  var snake, dir, nextDir, food, score, best, level, running, paused, gameOver, timer, speed;
+
+  function idx(x, y) { return y * COLS + x; }
+
+  function buildGrid() {
+    boardEl.innerHTML = "";
+    boardEl.style.gridTemplateColumns = "repeat(" + COLS + ", var(--cell))";
+    boardEl.style.gridTemplateRows = "repeat(" + ROWS + ", var(--cell))";
+    cellEls = [];
+    for (var i = 0; i < COLS * ROWS; i++) {
+      var c = document.createElement("div");
+      c.className = "cell";
+      boardEl.appendChild(c);
+      cellEls.push(c);
+    }
+  }
+
+  function loadBest() {
+    try { return parseInt(localStorage.getItem("bogdany-snake-best") || "0", 10) || 0; } catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem("bogdany-snake-best", String(v)); } catch (e) {}
+  }
+
+  function placeFood() {
+    var free = [];
+    for (var x = 0; x < COLS; x++) for (var y = 0; y < ROWS; y++) {
+      var occupied = snake.some(function (s) { return s.x === x && s.y === y; });
+      if (!occupied) free.push({ x: x, y: y });
+    }
+    food = free.length ? free[Math.floor(Math.random() * free.length)] : null;
+  }
+
+  function newGame() {
+    var cx = Math.floor(COLS / 2), cy = Math.floor(ROWS / 2);
+    snake = [{ x: cx - 1, y: cy }, { x: cx - 2, y: cy }, { x: cx - 3, y: cy }];
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    best = loadBest();
+    level = level || 2;
+    speed = LEVEL_SPEED[level];
+    running = false;
+    paused = false;
+    gameOver = false;
+    placeFood();
+    setStatus("press a direction or [\u2191] to start", "");
+    render();
+    stopTimer();
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    if (!gameOver) {
+      statusEl.appendChild(document.createTextNode(" "));
+      var cur = document.createElement("span");
+      cur.className = "cursor";
+      statusEl.appendChild(cur);
+    }
+  }
+
+  function render() {
+    for (var i = 0; i < cellEls.length; i++) cellEls[i].className = "cell";
+    if (food) cellEls[idx(food.x, food.y)].className = "cell food";
+    for (var s = snake.length - 1; s >= 0; s--) {
+      var seg = snake[s];
+      if (seg.x < 0 || seg.x >= COLS || seg.y < 0 || seg.y >= ROWS) continue;
+      cellEls[idx(seg.x, seg.y)].className = "cell seg" + (s === 0 ? " head" : "");
+    }
+    statScore.textContent = "score " + score;
+    statBest.textContent = "best " + Math.max(best, score);
+  }
+
+  function startTimer() {
+    stopTimer();
+    timer = setInterval(tick, speed);
+  }
+  function stopTimer() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+
+  function setDirection(dx, dy) {
+    if (gameOver) return;
+    // ignore reversing directly into the current body
+    if (dx === -dir.x && dy === -dir.y) return;
+    nextDir = { x: dx, y: dy };
+    if (!running) {
+      running = true;
+      paused = false;
+      btnPause.textContent = "[pause]";
+      setStatus("go", "");
+      startTimer();
+    } else if (paused) {
+      togglePause();
+    }
+  }
+
+  function tick() {
+    dir = nextDir;
+    var head = snake[0];
+    var nx = head.x + dir.x, ny = head.y + dir.y;
+
+    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) { return crash(); }
+    var hitsSelf = snake.some(function (s, i) { return i < snake.length - 1 && s.x === nx && s.y === ny; });
+    // allow moving into the tail cell that is about to vacate, unless growing this turn
+    var willGrow = food && nx === food.x && ny === food.y;
+    var tail = snake[snake.length - 1];
+    if (hitsSelf && !(nx === tail.x && ny === tail.y && !willGrow)) return crash();
+
+    snake.unshift({ x: nx, y: ny });
+    if (willGrow) {
+      score++;
+      placeFood();
+      speed = Math.max(MIN_SPEED, LEVEL_SPEED[level] - score * 2);
+      startTimer();
+    } else {
+      snake.pop();
+    }
+    render();
+  }
+
+  function crash() {
+    stopTimer();
+    gameOver = true;
+    running = false;
+    if (score > best) { best = score; saveBest(best); setStatus("new best! score " + score, ""); }
+    else setStatus("crashed \u2014 score " + score + " (best " + best + ")", "red");
+    render();
+  }
+
+  function togglePause() {
+    if (!running || gameOver) return;
+    paused = !paused;
+    if (paused) { stopTimer(); setStatus("paused", "dim"); btnPause.textContent = "[resume]"; }
+    else { startTimer(); setStatus("go", ""); btnPause.textContent = "[pause]"; }
+  }
+
+  // ---------- controls ----------
+  level = 2;
+  document.getElementById("btn-new").addEventListener("click", newGame);
+  btnPause.addEventListener("click", togglePause);
+  btnLvl.addEventListener("click", function () {
+    level = level % 3 + 1;
+    btnLvl.textContent = "[lvl: " + level + "]";
+    if (!running) speed = LEVEL_SPEED[level];
+  });
+
+  document.getElementById("btn-up").addEventListener("click", function () { setDirection(0, -1); });
+  document.getElementById("btn-down").addEventListener("click", function () { setDirection(0, 1); });
+  document.getElementById("btn-left").addEventListener("click", function () { setDirection(-1, 0); });
+  document.getElementById("btn-right").addEventListener("click", function () { setDirection(1, 0); });
+
+  document.addEventListener("keydown", function (e) {
+    var k = e.key;
+    if (k === " ") { e.preventDefault(); togglePause(); return; }
+    var map = {
+      ArrowUp: [0, -1], w: [0, -1], W: [0, -1],
+      ArrowDown: [0, 1], s: [0, 1], S: [0, 1],
+      ArrowLeft: [-1, 0], a: [-1, 0], A: [-1, 0],
+      ArrowRight: [1, 0], d: [1, 0], D: [1, 0]
+    };
+    if (map[k]) { e.preventDefault(); setDirection(map[k][0], map[k][1]); }
+  });
+
+  // swipe support
+  var touchStart = null;
+  boardEl.addEventListener("touchstart", function (e) {
+    var t = e.changedTouches[0];
+    touchStart = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+  boardEl.addEventListener("touchend", function (e) {
+    if (!touchStart) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+    if (Math.abs(dx) > Math.abs(dy)) setDirection(dx > 0 ? 1 : -1, 0);
+    else setDirection(0, dy > 0 ? 1 : -1);
+  }, { passive: true });
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  function openRules() { stopTimer(); rulesOverlay.hidden = false; }
+  function closeRules() {
+    rulesOverlay.hidden = true;
+    if (running && !paused && !gameOver) startTimer();
+  }
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-rules-close").addEventListener("click", closeRules);
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) closeRules(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) closeRules();
+  });
+
+  buildGrid();
+  newGame();
+
+  // when embedded in the terminal, the back-link is redundant — disable it
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

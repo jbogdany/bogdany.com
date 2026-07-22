@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>reversi — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+    --sq: min(11vw, 58px);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 8px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  .wrap { max-width: 520px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 2px 10px;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header .dim { color: var(--amber-dim); }
+
+  .btns { display: flex; gap: 10px; }
+  button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    padding: 2px;
+  }
+  button:hover, button:focus-visible { color: var(--amber); outline: none; }
+  button:focus-visible { text-decoration: underline; }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    grid-template-rows: repeat(8, var(--sq));
+    border: 1px solid var(--amber-dim);
+    box-shadow: 0 0 14px rgba(255,176,0,0.12);
+    width: fit-content;
+    margin: 0 auto;
+  }
+
+  .sq {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .sq.light { background: rgba(255, 176, 0, 0.10); }
+  .sq.dark  { background: rgba(255, 176, 0, 0.03); }
+
+  .sq.last { background: rgba(255, 176, 0, 0.20); }
+  .sq.dark.last { background: rgba(255, 176, 0, 0.14); }
+
+  .sq.legal::after {
+    content: "";
+    position: absolute;
+    width: 26%;
+    height: 26%;
+    border-radius: 50%;
+    background: var(--amber);
+    opacity: 0.30;
+    pointer-events: none;
+  }
+  .sq.legal:hover::after { opacity: 0.55; }
+  .sq.legal:hover { background: rgba(255, 176, 0, 0.18); }
+
+  .disc {
+    width: 78%;
+    height: 78%;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+  }
+  .disc.p {
+    background: radial-gradient(circle at 35% 30%, #ffd980, var(--amber) 60%);
+    box-shadow: 0 0 10px var(--glow);
+  }
+  .disc.a {
+    background: radial-gradient(circle at 35% 30%, #ff9c80, var(--red) 60%);
+    box-shadow: 0 0 10px var(--glow-red);
+  }
+  .disc.flip {
+    animation: flip 0.28s ease;
+  }
+  @keyframes flip {
+    0%   { transform: scaleX(1); }
+    50%  { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .disc.flip { animation: none; }
+  }
+
+  .score {
+    display: flex;
+    justify-content: center;
+    gap: 28px;
+    padding: 10px 0 0;
+    text-shadow: 0 0 6px var(--glow);
+    font-size: 0.95em;
+  }
+  .score .p-score { color: var(--amber); }
+  .score .a-score { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+
+  .status {
+    text-align: center;
+    padding: 8px 0 4px;
+    min-height: 2.2em;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .status .dim { color: var(--amber-dim); }
+  .status .red { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 520px;
+    margin: 0 auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.85em;
+  }
+  .statusbar a { color: var(--amber-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--amber); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 11, 7, 0.94);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .overlay h2 {
+    margin-bottom: 12px;
+    letter-spacing: 0.02em;
+  }
+  .overlay li {
+    color: var(--amber-dim);
+    margin-bottom: 9px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+  .overlay .close-row { text-align: center; margin-top: 16px; }
+  .overlay button { color: var(--amber); font-size: 1.05em; }
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <span>guest@bogdany:~$ <span class="dim">reversi</span></span>
+    <span class="btns">
+      <button id="btn-rules">[rules]</button>
+      <button id="btn-lvl">[lvl: 2]</button>
+      <button id="btn-new">[new]</button>
+    </span>
+  </header>
+
+  <div class="board" id="board"></div>
+  <div class="score" id="score"></div>
+  <div class="status" id="status"></div>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.html">bogdany.com</a></span>
+  <span>you play amber</span>
+  <span id="stat-turn">—</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>reversi &mdash; rules</h2>
+    <ul>
+      <li>Players take turns placing discs on the board. You are amber; the machine is red.</li>
+      <li>A move is only legal if it flanks one or more of the opponent's discs in a straight line &mdash; horizontally, vertically, or diagonally.</li>
+      <li>All flanked discs are flipped to your color.</li>
+      <li>If you have no legal move, your turn is skipped. The game ends when neither player can move.</li>
+      <li>The player with the most discs when the board is full (or when no moves remain) wins.</li>
+      <li>Valid squares are shown as faint dots. Click one to place your disc.</li>
+    </ul>
+    <div class="close-row"><button id="btn-rules-close">[resume]</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var SIZE = 8;
+
+  // 8 direction deltas: row, col
+  var DR = [-1, -1, -1,  0,  0,  1,  1,  1];
+  var DC = [-1,  0,  1, -1,  1, -1,  0,  1];
+
+  // Positional weights: corners are most valuable, neighbours of corners dangerous
+  var PST = [
+    120, -20,  20,   5,   5,  20, -20, 120,
+    -20, -40,  -5,  -5,  -5,  -5, -40, -20,
+     20,  -5,  15,   3,   3,  15,  -5,  20,
+      5,  -5,   3,   3,   3,   3,  -5,   5,
+      5,  -5,   3,   3,   3,   3,  -5,   5,
+     20,  -5,  15,   3,   3,  15,  -5,  20,
+    -20, -40,  -5,  -5,  -5,  -5, -40, -20,
+    120, -20,  20,   5,   5,  20, -20, 120
+  ];
+
+  function other(c) { return c === "p" ? "a" : "p"; }
+
+  function initialBoard() {
+    var b = new Array(64).fill(null);
+    b[27] = "p"; b[28] = "a";
+    b[35] = "a"; b[36] = "p";
+    return b;
+  }
+
+  function getFlips(b, sq, col) {
+    if (b[sq]) return [];
+    var r = Math.floor(sq / SIZE), c = sq % SIZE;
+    var opp = other(col);
+    var flips = [];
+    for (var d = 0; d < 8; d++) {
+      var line = [];
+      var nr = r + DR[d], nc = c + DC[d];
+      while (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) {
+        var ni = nr * SIZE + nc;
+        if (b[ni] === opp) {
+          line.push(ni);
+          nr += DR[d]; nc += DC[d];
+        } else if (b[ni] === col) {
+          for (var k = 0; k < line.length; k++) flips.push(line[k]);
+          break;
+        } else {
+          break;
+        }
+      }
+    }
+    return flips;
+  }
+
+  function legalMoves(b, col) {
+    var moves = [];
+    for (var i = 0; i < 64; i++) {
+      if (!b[i] && getFlips(b, i, col).length > 0) moves.push(i);
+    }
+    return moves;
+  }
+
+  function applyMove(b, sq, col) {
+    var nb = b.slice();
+    nb[sq] = col;
+    var flips = getFlips(b, sq, col);
+    for (var k = 0; k < flips.length; k++) nb[flips[k]] = col;
+    return { board: nb, flips: flips };
+  }
+
+  function countDiscs(b) {
+    var p = 0, a = 0;
+    for (var i = 0; i < 64; i++) {
+      if (b[i] === "p") p++;
+      else if (b[i] === "a") a++;
+    }
+    return { p: p, a: a };
+  }
+
+  // Evaluate from AI ("a") perspective: positive = good for AI
+  function evaluate(b) {
+    var pPos = 0, aPos = 0;
+    for (var i = 0; i < 64; i++) {
+      if (b[i] === "p") pPos += PST[i];
+      else if (b[i] === "a") aPos += PST[i];
+    }
+    var pMob = legalMoves(b, "p").length;
+    var aMob = legalMoves(b, "a").length;
+    var c = countDiscs(b);
+    var total = c.p + c.a;
+    var mobWeight = total < 50 ? 10 : 3;
+    var discWeight = total > 50 ? 5 : 0;
+    return (aPos - pPos) + mobWeight * (aMob - pMob) + discWeight * (c.a - c.p);
+  }
+
+  function minimax(b, depth, alpha, beta, maxing) {
+    var myCol = maxing ? "a" : "p";
+    var moves = legalMoves(b, myCol);
+
+    if (moves.length === 0) {
+      var oppMoves = legalMoves(b, other(myCol));
+      if (oppMoves.length === 0) {
+        var c = countDiscs(b);
+        return c.a > c.p ? 100000 : c.p > c.a ? -100000 : 0;
+      }
+      return minimax(b, depth > 0 ? depth - 1 : 0, alpha, beta, !maxing);
+    }
+
+    if (depth === 0) return evaluate(b);
+
+    var i, nb, sc;
+    if (maxing) {
+      var best = -Infinity;
+      for (i = 0; i < moves.length; i++) {
+        nb = applyMove(b, moves[i], "a").board;
+        sc = minimax(nb, depth - 1, alpha, beta, false);
+        if (sc > best) best = sc;
+        if (best > alpha) alpha = best;
+        if (alpha >= beta) break;
+      }
+      return best;
+    } else {
+      var worst = Infinity;
+      for (i = 0; i < moves.length; i++) {
+        nb = applyMove(b, moves[i], "p").board;
+        sc = minimax(nb, depth - 1, alpha, beta, true);
+        if (sc < worst) worst = sc;
+        if (worst < beta) beta = worst;
+        if (alpha >= beta) break;
+      }
+      return worst;
+    }
+  }
+
+  function bestMove(b, depth, jitter) {
+    var moves = legalMoves(b, "a");
+    if (!moves.length) return -1;
+    var best = -1, bestScore = -Infinity, i, nb, sc;
+    for (i = 0; i < moves.length; i++) {
+      nb = applyMove(b, moves[i], "a").board;
+      sc = minimax(nb, depth - 1, -Infinity, Infinity, false);
+      if (jitter) sc += Math.random() * 24 - 12;
+      if (sc > bestScore) { bestScore = sc; best = moves[i]; }
+    }
+    return best;
+  }
+
+  // ---------- UI ----------
+  var boardEl = document.getElementById("board");
+  var scoreEl = document.getElementById("score");
+  var statusEl = document.getElementById("status");
+  var statTurn = document.getElementById("stat-turn");
+  var btnLvl = document.getElementById("btn-lvl");
+  var sqEls = [];
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var board, turn, gameOver, thinking, legal, lastSq, level;
+
+  // Build the 64 squares once
+  (function () {
+    for (var i = 0; i < 64; i++) {
+      (function (i) {
+        var sq = document.createElement("div");
+        var r = Math.floor(i / SIZE), c = i % SIZE;
+        sq.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
+        sq.addEventListener("click", function () { onSquare(i); });
+        boardEl.appendChild(sq);
+        sqEls[i] = sq;
+      })(i);
+    }
+  })();
+
+  function newGame() {
+    board = initialBoard();
+    turn = "p";
+    gameOver = false;
+    thinking = false;
+    lastSq = -1;
+    legal = legalMoves(board, "p");
+    render();
+    setStatus("your move", "");
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    if (!gameOver) {
+      statusEl.appendChild(document.createTextNode(" "));
+      var cur = document.createElement("span");
+      cur.className = "cursor";
+      statusEl.appendChild(cur);
+    }
+  }
+
+  function render(flipList) {
+    var c = countDiscs(board);
+    scoreEl.innerHTML =
+      '<span class="p-score">amber ' + pad(c.p) + '</span>' +
+      ' &mdash; ' +
+      '<span class="a-score">red ' + pad(c.a) + '</span>';
+
+    for (var i = 0; i < 64; i++) {
+      var sq = sqEls[i];
+      var r = Math.floor(i / SIZE), col = i % SIZE;
+      var base = (r + col) % 2 === 0 ? "light" : "dark";
+      var cls = "sq " + base;
+      if (i === lastSq) cls += " last";
+      if (!board[i] && legal && legal.indexOf(i) !== -1) cls += " legal";
+      sq.className = cls;
+
+      sq.innerHTML = "";
+      if (board[i]) {
+        var disc = document.createElement("div");
+        disc.className = "disc " + board[i];
+        if (!reducedMotion && flipList && flipList.indexOf(i) !== -1) {
+          disc.classList.add("flip");
+        }
+        sq.appendChild(disc);
+      }
+    }
+
+    statTurn.textContent = gameOver ? "game over" : (turn === "p" ? "your turn" : "machine");
+  }
+
+  function pad(n) {
+    return n < 10 ? "0" + n : "" + n;
+  }
+
+  function onSquare(i) {
+    if (gameOver || thinking || turn !== "p") return;
+    if (!legal || legal.indexOf(i) === -1) return;
+    playerMove(i);
+  }
+
+  function playerMove(sq) {
+    var result = applyMove(board, sq, "p");
+    board = result.board;
+    lastSq = sq;
+    var flips = result.flips;
+    legal = [];
+    render(flips);
+
+    if (checkEnd()) return;
+
+    turn = "a";
+    var aiMoves = legalMoves(board, "a");
+    if (!aiMoves.length) {
+      // AI must pass
+      legal = legalMoves(board, "p");
+      turn = "p";
+      setStatus("machine passes — your move", "dim");
+      return;
+    }
+    aiTurn();
+  }
+
+  function aiTurn() {
+    thinking = true;
+    setStatus("thinking...", "dim");
+    setTimeout(function () {
+      var depth = level === 1 ? 2 : level === 2 ? 5 : 7;
+      var sq = bestMove(board, depth, level === 1);
+      if (sq >= 0) {
+        var result = applyMove(board, sq, "a");
+        board = result.board;
+        lastSq = sq;
+        var flips = result.flips;
+        thinking = false;
+
+        if (checkEnd()) { render(flips); return; }
+
+        turn = "p";
+        legal = legalMoves(board, "p");
+        render(flips);
+
+        if (!legal.length) {
+          // Player must pass
+          turn = "a";
+          legal = [];
+          setStatus("no moves — passing to machine", "dim");
+          setTimeout(function () {
+            if (!gameOver) { aiTurn(); }
+          }, 700);
+        } else {
+          setStatus("your move", "");
+        }
+      } else {
+        thinking = false;
+        checkEnd();
+      }
+    }, 160);
+  }
+
+  function checkEnd() {
+    var pMoves = legalMoves(board, "p");
+    var aMoves = legalMoves(board, "a");
+    if (pMoves.length > 0 || aMoves.length > 0) return false;
+
+    gameOver = true;
+    legal = [];
+    var c = countDiscs(board);
+    statTurn.textContent = "game over";
+    if (c.p > c.a) setStatus("amber wins — " + c.p + " to " + c.a, "");
+    else if (c.a > c.p) setStatus("red wins — " + c.a + " to " + c.p, "red");
+    else setStatus("draw — " + c.p + " each", "dim");
+    render(null);
+    return true;
+  }
+
+  // ---------- controls ----------
+  level = 2;
+  document.getElementById("btn-new").addEventListener("click", newGame);
+  btnLvl.addEventListener("click", function () {
+    level = level % 3 + 1;
+    btnLvl.textContent = "[lvl: " + level + "]";
+  });
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  function openRules() { rulesOverlay.hidden = false; }
+  function closeRules() { rulesOverlay.hidden = true; }
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-rules-close").addEventListener("click", closeRules);
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) closeRules(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) closeRules();
+  });
+
+  newGame();
+
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

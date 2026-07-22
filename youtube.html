@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>youtube — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 8px;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 2px 10px;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header .dim { color: var(--amber-dim); }
+
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    padding: 2px;
+  }
+  button:hover, button:focus-visible { color: var(--amber); outline: none; }
+  button:focus-visible { text-decoration: underline; }
+  button:disabled { color: var(--amber-faint); cursor: default; text-shadow: none; }
+
+  .searchrow {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .searchrow input {
+    flex: 1;
+    min-width: 160px;
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    border-radius: 4px;
+    color: var(--amber);
+    font: inherit;
+    padding: 6px 9px;
+  }
+  .searchrow input:focus { outline: none; border-color: var(--amber-dim); }
+  .searchrow input::placeholder { color: var(--amber-faint); }
+
+  .keypanel {
+    border: 1px solid var(--amber-faint);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+    line-height: 1.6;
+  }
+  .keypanel[hidden] { display: none; }
+  .keypanel p { color: var(--amber-dim); margin-bottom: 8px; }
+  .keypanel .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .keypanel input {
+    flex: 1;
+    min-width: 160px;
+    background: transparent;
+    border: 1px solid var(--amber-faint);
+    border-radius: 4px;
+    color: var(--amber);
+    font: inherit;
+    padding: 6px 9px;
+  }
+  .keypanel a { color: var(--amber); }
+  .keypanel .small { color: var(--amber-faint); font-size: 0.88em; margin-top: 6px; }
+
+  .status {
+    text-align: center;
+    padding: 8px 0;
+    min-height: 2.2em;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .status .dim { color: var(--amber-dim); }
+  .status .red { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+
+  .results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    cursor: pointer;
+    border: 1px solid var(--amber-faint);
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(255, 176, 0, 0.03);
+  }
+  .card:hover { border-color: var(--amber-dim); }
+  .thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000 center/cover no-repeat;
+  }
+  .thumb .play {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2em;
+    color: var(--amber);
+    text-shadow: 0 0 10px var(--glow);
+    opacity: 0;
+    background: rgba(13, 11, 7, 0.35);
+  }
+  .card:hover .thumb .play { opacity: 1; }
+  .cardbody { padding: 8px 10px; }
+  .cardtitle {
+    color: var(--amber);
+    font-size: 0.92em;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .cardchannel { color: var(--amber-faint); font-size: 0.8em; }
+
+  .playerwrap { display: none; }
+  .playerwrap.active { display: block; }
+  .playerframe {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--amber-faint);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #000;
+  }
+  .playerframe iframe { width: 100%; height: 100%; border: none; }
+  .playermeta { padding: 10px 2px; }
+  .playermeta .t { color: var(--amber); margin-bottom: 4px; }
+  .playermeta .c { color: var(--amber-faint); font-size: 0.85em; }
+  .backrow { padding-bottom: 10px; }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 900px;
+    margin: 0 auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.85em;
+  }
+  .statusbar a { color: var(--amber-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--amber); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 11, 7, 0.94);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .overlay h2 { margin-bottom: 12px; letter-spacing: 0.02em; }
+  .overlay li {
+    color: var(--amber-dim);
+    margin-bottom: 9px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+  .overlay .close-row { text-align: center; margin-top: 16px; }
+  .overlay button { color: var(--amber); font-size: 1.05em; }
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <span>guest@bogdany:~$ <span class="dim">youtube</span></span>
+    <span class="btns">
+      <button id="btn-rules">[rules]</button>
+      <button id="btn-key">[api key]</button>
+    </span>
+  </header>
+
+  <div class="keypanel" id="keypanel" hidden>
+    <p>Search uses the official YouTube Data API, which needs a free API key tied to your own Google account &mdash; there's no way to bundle one that works for every visitor.</p>
+    <div class="row">
+      <input id="keyInput" type="text" placeholder="paste your YouTube Data API key" autocomplete="off" spellcheck="false" />
+      <button id="btn-key-save">[save]</button>
+      <button id="btn-key-clear">[clear]</button>
+    </div>
+    <p class="small">Get one free: <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">console.cloud.google.com</a> &mdash; new project &rarr; enable "YouTube Data API v3" &rarr; Credentials &rarr; Create API key. Restrict it to your domain when you're done testing. Free tier covers about 100 searches a day.</p>
+  </div>
+
+  <div class="searchrow">
+    <input id="searchInput" type="text" placeholder="search youtube..." autocomplete="off" />
+    <button id="btn-search">[search]</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="backrow playerwrap" id="playerwrap">
+    <button id="btn-back">[\u2190 back to results]</button>
+    <div class="playerframe" id="playerframe"></div>
+    <div class="playermeta">
+      <div class="t" id="playerTitle"></div>
+      <div class="c" id="playerChannel"></div>
+    </div>
+  </div>
+
+  <div class="results" id="results"></div>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.html">bogdany.com</a></span>
+  <span id="stat-count"></span>
+  <span>bogdany arcade</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>youtube &mdash; rules</h2>
+    <ul>
+      <li>Type a search into the box (or run <code>youtube &lt;query&gt;</code> from the main terminal) and hit [search] to see a grid of matching videos with thumbnails.</li>
+      <li>Click any result to watch it right here, embedded in the page &mdash; nothing opens in a new tab.</li>
+      <li>[\u2190 back to results] returns to your last search without re-searching.</li>
+      <li>Search needs a free YouTube Data API key from your own Google account, set once via [api key]. YouTube doesn't allow its own search page to be embedded on other sites, so this is the only way to get real results here &mdash; playback itself doesn't need a key.</li>
+      <li>The free tier covers roughly 100 searches a day; it resets at midnight Pacific time.</li>
+    </ul>
+    <div class="close-row"><button id="btn-rules-close">[resume]</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var searchInput = document.getElementById("searchInput");
+  var statusEl = document.getElementById("status");
+  var resultsEl = document.getElementById("results");
+  var statCount = document.getElementById("stat-count");
+  var keypanel = document.getElementById("keypanel");
+  var keyInput = document.getElementById("keyInput");
+  var playerwrap = document.getElementById("playerwrap");
+  var playerframe = document.getElementById("playerframe");
+  var playerTitle = document.getElementById("playerTitle");
+  var playerChannel = document.getElementById("playerChannel");
+
+  var KEY_STORE = "bogdany-yt-apikey";
+  var lastResultsHTML = "";
+
+  function getKey() {
+    try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; }
+  }
+  function setKey(k) {
+    try {
+      if (k) localStorage.setItem(KEY_STORE, k);
+      else localStorage.removeItem(KEY_STORE);
+    } catch (e) {}
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    var cur = document.createElement("span");
+    cur.className = "cursor";
+    statusEl.appendChild(document.createTextNode(" "));
+    statusEl.appendChild(cur);
+  }
+
+  function escapeHtml(s) {
+    var d = document.createElement("div");
+    d.textContent = s || "";
+    return d.innerHTML;
+  }
+
+  function showResults() {
+    playerwrap.classList.remove("active");
+    resultsEl.style.display = "";
+  }
+  function showPlayer() {
+    resultsEl.style.display = "none";
+    playerwrap.classList.add("active");
+  }
+
+  function playVideo(id, title, channel) {
+    playerframe.innerHTML =
+      '<iframe src="https://www.youtube.com/embed/' + encodeURIComponent(id) +
+      '?autoplay=1&rel=0" title="video player" ' +
+      'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" ' +
+      'allowfullscreen></iframe>';
+    playerTitle.textContent = title;
+    playerChannel.textContent = channel;
+    showPlayer();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  document.getElementById("btn-back").addEventListener("click", function () {
+    playerframe.innerHTML = "";
+    showResults();
+  });
+
+  function renderResults(items) {
+    resultsEl.innerHTML = "";
+    items.forEach(function (item) {
+      var id = item.id && item.id.videoId;
+      if (!id) return;
+      var sn = item.snippet || {};
+      var thumb = (sn.thumbnails && (sn.thumbnails.medium || sn.thumbnails.default) || {}).url || "";
+      var title = sn.title || "";
+      var channel = sn.channelTitle || "";
+
+      var card = document.createElement("div");
+      card.className = "card";
+
+      var thumbEl = document.createElement("div");
+      thumbEl.className = "thumb";
+      thumbEl.style.backgroundImage = thumb ? "url('" + thumb + "')" : "none";
+      var play = document.createElement("div");
+      play.className = "play";
+      play.textContent = "\u25B6";
+      thumbEl.appendChild(play);
+
+      var body = document.createElement("div");
+      body.className = "cardbody";
+      var t = document.createElement("div");
+      t.className = "cardtitle";
+      t.textContent = title;
+      var c = document.createElement("div");
+      c.className = "cardchannel";
+      c.textContent = channel;
+      body.appendChild(t);
+      body.appendChild(c);
+
+      card.appendChild(thumbEl);
+      card.appendChild(body);
+      card.addEventListener("click", function () { playVideo(id, title, channel); });
+      resultsEl.appendChild(card);
+    });
+    lastResultsHTML = resultsEl.innerHTML;
+  }
+
+  function doSearch(query) {
+    query = (query || "").trim();
+    if (!query) return;
+    var key = getKey();
+    if (!key) {
+      keypanel.hidden = false;
+      setStatus("add a free API key below to enable search", "dim");
+      return;
+    }
+    searchInput.value = query;
+    setStatus("searching...", "dim");
+    resultsEl.innerHTML = "";
+    statCount.textContent = "";
+    playerframe.innerHTML = "";
+    showResults();
+
+    var url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=15&q=" +
+               encodeURIComponent(query) + "&key=" + encodeURIComponent(key);
+
+    fetch(url).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+    }).then(function (r) {
+      if (!r.ok) {
+        var msg = (r.data && r.data.error && r.data.error.message) || ("request failed (" + r.status + ")");
+        if (r.status === 403) msg += " \u2014 check your key's restrictions, or you may have hit today's quota";
+        setStatus(msg, "red");
+        return;
+      }
+      var items = r.data.items || [];
+      if (!items.length) {
+        setStatus("no results for \u201c" + query + "\u201d", "dim");
+        return;
+      }
+      renderResults(items);
+      statCount.textContent = items.length + " results";
+      setStatus("results for \u201c" + query + "\u201d", "");
+    }).catch(function () {
+      setStatus("network error \u2014 check your connection and try again", "red");
+    });
+  }
+
+  document.getElementById("btn-search").addEventListener("click", function () { doSearch(searchInput.value); });
+  searchInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") doSearch(searchInput.value);
+  });
+
+  var btnKey = document.getElementById("btn-key");
+  btnKey.addEventListener("click", function () {
+    keypanel.hidden = !keypanel.hidden;
+    if (!keypanel.hidden) keyInput.value = getKey();
+  });
+  document.getElementById("btn-key-save").addEventListener("click", function () {
+    var v = keyInput.value.trim();
+    if (!v) return;
+    setKey(v);
+    keypanel.hidden = true;
+    setStatus("api key saved \u2014 try a search", "dim");
+  });
+  document.getElementById("btn-key-clear").addEventListener("click", function () {
+    setKey("");
+    keyInput.value = "";
+    setStatus("api key cleared", "dim");
+  });
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  document.getElementById("btn-rules").addEventListener("click", function () { rulesOverlay.hidden = false; });
+  document.getElementById("btn-rules-close").addEventListener("click", function () { rulesOverlay.hidden = true; });
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) rulesOverlay.hidden = true; });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) rulesOverlay.hidden = true;
+  });
+
+  // ---------- boot ----------
+  var params = new URLSearchParams(window.location.search);
+  var initialQuery = params.get("q") || "";
+  if (!getKey()) {
+    keypanel.hidden = false;
+    setStatus(initialQuery ? "add a free API key below, then search" : "add a free API key below to get started", "dim");
+    if (initialQuery) searchInput.value = initialQuery;
+  } else if (initialQuery) {
+    doSearch(initialQuery);
+  } else {
+    setStatus("search youtube \u2014 results play right here", "dim");
+  }
+
+  // when embedded in the terminal, the back-link is redundant — disable it
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

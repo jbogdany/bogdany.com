@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="theme.js"></script>
+<script src="chat-shortcut.js"></script>
+<link rel="stylesheet" href="site.css">
+
+<title>go — bogdany.com</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0b07;
+    --amber: #ffb000;
+    --amber-dim: #c07f1a;
+    --amber-faint: #6e5320;
+    --red: #ff5533;
+    --glow: rgba(255, 176, 0, 0.28);
+    --glow-red: rgba(255, 85, 51, 0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--amber);
+    font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: clamp(12px, 1.5vw, 15px);
+    padding: 8px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+
+  .crt {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.15) 3px
+    );
+  }
+
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 4px 2px 10px;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  header .dim { color: var(--amber-dim); }
+
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  button {
+    background: transparent;
+    border: none;
+    color: var(--amber-dim);
+    font: inherit;
+    cursor: pointer;
+    text-shadow: 0 0 6px var(--glow);
+    padding: 2px;
+  }
+  button:hover, button:focus-visible { color: var(--amber); outline: none; }
+  button:focus-visible { text-decoration: underline; }
+
+  .boardbox { display: flex; justify-content: center; }
+  svg {
+    width: min(94vw, 520px);
+    height: auto;
+    display: block;
+  }
+
+  .gridline { stroke: var(--amber-faint); stroke-width: 1; }
+  .star { fill: var(--amber-faint); }
+  .stone.p { fill: url(#grad-p); }
+  .stone.a { fill: url(#grad-a); }
+  .stone.p { filter: drop-shadow(0 0 4px var(--glow)); }
+  .stone.a { filter: drop-shadow(0 0 4px var(--glow-red)); }
+  .lastdot { fill: var(--bg); opacity: 0.9; }
+  .terr.p { fill: var(--amber); opacity: 0.45; }
+  .terr.a { fill: var(--red); opacity: 0.45; }
+  .hit { fill: transparent; cursor: pointer; }
+
+  .status {
+    text-align: center;
+    padding: 10px 0 2px;
+    min-height: 2.2em;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .status .dim { color: var(--amber-dim); }
+  .status .red { color: var(--red); text-shadow: 0 0 6px var(--glow-red); }
+  .hint {
+    text-align: center;
+    color: var(--amber-faint);
+    font-size: 0.8em;
+    min-height: 1.4em;
+    padding-bottom: 6px;
+  }
+
+  .statusbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    max-width: 560px;
+    margin: 0 auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--amber-faint);
+    color: var(--amber-faint);
+    font-size: 0.85em;
+  }
+  .statusbar a { color: var(--amber-faint); text-decoration: none; }
+  .statusbar a:hover { color: var(--amber); }
+
+  .cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    box-shadow: 0 0 8px var(--glow);
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(13, 11, 7, 0.94);
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay .box {
+    max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    text-shadow: 0 0 6px var(--glow);
+  }
+  .overlay h2 {
+    margin-bottom: 12px;
+    letter-spacing: 0.02em;
+  }
+  .overlay li {
+    color: var(--amber-dim);
+    margin-bottom: 9px;
+    line-height: 1.55;
+    list-style: none;
+  }
+  .overlay li::before { content: "\2013  "; color: var(--amber-faint); }
+  .overlay .close-row { text-align: center; margin-top: 16px; }
+  .overlay button { color: var(--amber); font-size: 1.05em; }
+
+</style>
+</head>
+<body>
+<div class="crt" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <span>guest@bogdany:~$ <span class="dim">go</span></span>
+    <span class="btns">
+      <button id="btn-rules">[rules]</button>
+      <button id="btn-size">[size: 9]</button>
+      <button id="btn-lvl">[lvl: 2]</button>
+      <button id="btn-pass">[pass]</button>
+      <button id="btn-undo">[undo]</button>
+      <button id="btn-new">[new]</button>
+    </span>
+  </header>
+
+  <div class="boardbox"><svg id="board" xmlns="http://www.w3.org/2000/svg"></svg></div>
+  <div class="status" id="status"></div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<div class="statusbar">
+  <span><a href="index.html">bogdany.com</a></span>
+  <span id="stat-caps">captures 0 : 0</span>
+  <span id="stat-komi">komi 5.5</span>
+</div>
+
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="box">
+    <h2>go &mdash; rules</h2>
+    <ul>
+      <li>Players alternate placing stones on the intersections of the grid, not the squares.</li>
+      <li>A stone or connected group is captured and removed the moment it has no remaining liberties &mdash; no adjacent empty points.</li>
+      <li>You can't play a stone that leaves your own group with zero liberties, unless doing so captures enemy stones first (suicide is illegal).</li>
+      <li>Ko rule: you can't immediately replay a move that would recreate the exact position your opponent just captured into.</li>
+      <li>Passing twice in a row ends the game.</li>
+      <li>Scoring is by area: your stones plus the empty territory they surround, with a small komi bonus added for white to offset black's first-move advantage. Higher total wins.</li>
+    </ul>
+    <div class="close-row"><button id="btn-rules-close">[resume]</button></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // player 'p' = amber = black (moves first); machine 'a' = red = white
+  var SIZE = 9;
+  var KOMI = 5.5;
+  var NEIGH = [];
+  var STARS = { 9: [2, 4, 6], 13: [3, 6, 9] };
+
+  function buildNeigh() {
+    NEIGH = [];
+    for (var i = 0; i < SIZE * SIZE; i++) {
+      var r = Math.floor(i / SIZE), c = i % SIZE, n = [];
+      if (r > 0) n.push(i - SIZE);
+      if (r < SIZE - 1) n.push(i + SIZE);
+      if (c > 0) n.push(i - 1);
+      if (c < SIZE - 1) n.push(i + 1);
+      NEIGH.push(n);
+    }
+  }
+
+  function opp(col) { return col === "p" ? "a" : "p"; }
+
+  // flood-fill a group, counting distinct liberties
+  function group(b, i) {
+    var col = b[i], stones = [i], seen = {}, libs = {}, nlibs = 0, k, n, j;
+    seen[i] = true;
+    for (k = 0; k < stones.length; k++) {
+      var nb = NEIGH[stones[k]];
+      for (j = 0; j < nb.length; j++) {
+        n = nb[j];
+        if (b[n] === col) {
+          if (!seen[n]) { seen[n] = true; stones.push(n); }
+        } else if (!b[n]) {
+          if (!libs[n]) { libs[n] = true; nlibs++; }
+        }
+      }
+    }
+    return { stones: stones, libs: nlibs };
+  }
+
+  // returns new state or null if illegal (occupied / ko / suicide)
+  function tryMove(s, i, col) {
+    if (s.b[i] || i === s.ko) return null;
+    var b = s.b.slice();
+    b[i] = col;
+    var enemy = opp(col), capt = [], counted = {}, j, n, g, x;
+    var nb = NEIGH[i];
+    for (j = 0; j < nb.length; j++) {
+      n = nb[j];
+      if (b[n] === enemy && !counted[n]) {
+        g = group(b, n);
+        for (x = 0; x < g.stones.length; x++) counted[g.stones[x]] = true;
+        if (g.libs === 0) {
+          for (x = 0; x < g.stones.length; x++) { b[g.stones[x]] = null; capt.push(g.stones[x]); }
+        }
+      }
+    }
+    var own = group(b, i);
+    if (own.libs === 0) return null; // suicide
+    var ko = (capt.length === 1 && own.stones.length === 1 && own.libs === 1) ? capt[0] : -1;
+    var caps = { p: s.caps.p, a: s.caps.a };
+    caps[col] += capt.length;
+    return { b: b, turn: enemy, ko: ko, passes: 0, caps: caps, last: i };
+  }
+
+  function passMove(s, col) {
+    return { b: s.b.slice(), turn: opp(col), ko: -1, passes: s.passes + 1,
+             caps: { p: s.caps.p, a: s.caps.a }, last: -1 };
+  }
+
+  // all orthogonal neighbours are own colour -> looks like an eye, don't fill in rollouts
+  function eyeLike(b, i, col) {
+    var nb = NEIGH[i];
+    for (var j = 0; j < nb.length; j++) if (b[nb[j]] !== col) return false;
+    return true;
+  }
+
+  // Chinese (area) scoring: stones + surrounded empty territory
+  function scoreBoard(b) {
+    var sp = 0, sa = 0, done = {}, i;
+    var terr = { p: [], a: [] };
+    for (i = 0; i < SIZE * SIZE; i++) {
+      if (b[i] === "p") sp++;
+      else if (b[i] === "a") sa++;
+      else if (!done[i]) {
+        var region = [i], seen = {}, touchP = false, touchA = false, k, j, n;
+        seen[i] = true;
+        for (k = 0; k < region.length; k++) {
+          var nb = NEIGH[region[k]];
+          for (j = 0; j < nb.length; j++) {
+            n = nb[j];
+            if (!b[n]) { if (!seen[n]) { seen[n] = true; region.push(n); } }
+            else if (b[n] === "p") touchP = true;
+            else touchA = true;
+          }
+        }
+        for (k = 0; k < region.length; k++) done[region[k]] = true;
+        if (touchP && !touchA) { sp += region.length; terr.p = terr.p.concat(region); }
+        else if (touchA && !touchP) { sa += region.length; terr.a = terr.a.concat(region); }
+      }
+    }
+    return { p: sp, a: sa + KOMI, terr: terr };
+  }
+
+  // ---------- monte carlo engine ----------
+  function rollout(start) {
+    var b = start.b.slice(), turn = start.turn, ko = start.ko, passes = start.passes;
+    var moves = 0, cap = SIZE * SIZE * 2;
+    while (passes < 2 && moves < cap) {
+      var col = turn, enemy = opp(col), played = false;
+      var empt = [];
+      for (var i = 0; i < b.length; i++)
+        if (!b[i] && i !== ko && !eyeLike(b, i, col)) empt.push(i);
+      for (var k = empt.length - 1; k >= 0; k--) {
+        var r = (Math.random() * (k + 1)) | 0;
+        var pick = empt[r]; empt[r] = empt[k];
+        b[pick] = col;
+        var capt = [], counted = {}, nb = NEIGH[pick], j, n, g, x;
+        for (j = 0; j < nb.length; j++) {
+          n = nb[j];
+          if (b[n] === enemy && !counted[n]) {
+            g = group(b, n);
+            for (x = 0; x < g.stones.length; x++) counted[g.stones[x]] = true;
+            if (g.libs === 0)
+              for (x = 0; x < g.stones.length; x++) { b[g.stones[x]] = null; capt.push(g.stones[x]); }
+          }
+        }
+        var own = group(b, pick);
+        if (own.libs === 0) { // suicide — revert and try another point
+          for (x = 0; x < capt.length; x++) b[capt[x]] = enemy;
+          b[pick] = null;
+          continue;
+        }
+        ko = (capt.length === 1 && own.stones.length === 1 && own.libs === 1) ? capt[0] : -1;
+        played = true;
+        break;
+      }
+      if (played) passes = 0;
+      else { passes++; ko = -1; }
+      turn = enemy;
+      moves++;
+    }
+    var sc = scoreBoard(b);
+    return sc.a > sc.p ? 1 : 0; // 1 = machine wins
+  }
+
+  // candidate pruning: points within distance 2 of any stone, plus stars/centre
+  function candidates(s, col) {
+    var out = [], near = {}, i, r, c, dr, dc;
+    var hasStones = false;
+    for (i = 0; i < SIZE * SIZE; i++) {
+      if (s.b[i]) {
+        hasStones = true;
+        r = Math.floor(i / SIZE); c = i % SIZE;
+        for (dr = -2; dr <= 2; dr++) for (dc = -2; dc <= 2; dc++) {
+          var nr = r + dr, nc = c + dc;
+          if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE) near[nr * SIZE + nc] = true;
+        }
+      }
+    }
+    var stars = STARS[SIZE];
+    for (i = 0; i < stars.length; i++) for (var j2 = 0; j2 < stars.length; j2++)
+      near[stars[i] * SIZE + stars[j2]] = true;
+    if (!hasStones) near[Math.floor(SIZE / 2) * (SIZE + 1)] = true;
+    for (i = 0; i < SIZE * SIZE; i++) {
+      if (near[i] && !s.b[i] && i !== s.ko && !eyeLike(s.b, i, col) && tryMove(s, i, col)) out.push(i);
+    }
+    return out;
+  }
+
+  // quick tactical score for level 1 (and tie-breaking)
+  function heurScore(s, i, col) {
+    var ns = tryMove(s, i, col);
+    if (!ns) return -Infinity;
+    var gained = s.caps ? ns.caps[col] - s.caps[col] : 0;
+    var own = group(ns.b, i);
+    if (own.libs === 1 && gained === 0) return -50 + Math.random() * 5; // self-atari
+    var atari = 0, nb = NEIGH[i], seen = {};
+    for (var j = 0; j < nb.length; j++) {
+      var n = nb[j];
+      if (ns.b[n] === opp(col) && !seen[n]) {
+        var g = group(ns.b, n);
+        for (var x = 0; x < g.stones.length; x++) seen[g.stones[x]] = true;
+        if (g.libs === 1) atari += g.stones.length;
+      }
+    }
+    return gained * 20 + atari * 6 + own.libs + Math.random() * 8;
+  }
+
+  function bestMoveHeur(s, col) {
+    var cands = candidates(s, col);
+    if (!cands.length) return -1;
+    var best = -1, bestSc = -Infinity;
+    for (var i = 0; i < cands.length; i++) {
+      var sc = heurScore(s, cands[i], col);
+      if (sc > bestSc) { bestSc = sc; best = cands[i]; }
+    }
+    return bestSc <= -40 ? -1 : best;
+  }
+
+  function bestMoveMC(s, col, perMove) {
+    var cands = candidates(s, col);
+    // prune to the tactically most promising points
+    var scored = cands.map(function (i) { return { i: i, h: heurScore(s, i, col) }; });
+    scored.sort(function (a, b) { return b.h - a.h; });
+    cands = scored.slice(0, SIZE === 9 ? 14 : 16).map(function (o) { return o.i; });
+
+    var best = -1, bestWr = -Infinity, i, k, wins, ns, wr;
+    // pass is always a candidate
+    var options = cands.concat([-1]);
+    for (i = 0; i < options.length; i++) {
+      ns = options[i] === -1 ? passMove(s, col) : tryMove(s, options[i], col);
+      wins = 0;
+      for (k = 0; k < perMove; k++) wins += rollout(ns);
+      wr = wins / perMove + (options[i] === -1 ? -0.02 : 0) + Math.random() * 0.01;
+      if (wr > bestWr) { bestWr = wr; best = options[i]; }
+    }
+    return best;
+  }
+
+  // ---------- UI ----------
+  var state, snapshots, level, gameOver, thinking, finalScore;
+  var svg = document.getElementById("board");
+  var statusEl = document.getElementById("status");
+  var hintEl = document.getElementById("hint");
+  var statCaps = document.getElementById("stat-caps");
+  var statKomi = document.getElementById("stat-komi");
+  var btnLvl = document.getElementById("btn-lvl");
+  var btnSize = document.getElementById("btn-size");
+  var U = 30, PAD = 24;
+
+  function newGame() {
+    buildNeigh();
+    state = { b: new Array(SIZE * SIZE).fill(null), turn: "p", ko: -1,
+              passes: 0, caps: { p: 0, a: 0 }, last: -1 };
+    snapshots = [];
+    gameOver = false;
+    thinking = false;
+    finalScore = null;
+    hintEl.textContent = "";
+    statKomi.textContent = "komi " + KOMI;
+    setStatus("your move", "");
+    render();
+  }
+
+  function setStatus(text, cls) {
+    statusEl.innerHTML = "";
+    var span = document.createElement("span");
+    if (cls) span.className = cls;
+    span.textContent = text;
+    statusEl.appendChild(span);
+    if (!gameOver) {
+      statusEl.appendChild(document.createTextNode(" "));
+      var cur = document.createElement("span");
+      cur.className = "cursor";
+      statusEl.appendChild(cur);
+    }
+  }
+
+  function render() {
+    var w = PAD * 2 + (SIZE - 1) * U;
+    var parts = [];
+    parts.push('<defs>' +
+      '<radialGradient id="grad-p" cx="35%" cy="30%"><stop offset="0%" stop-color="#ffd980"/><stop offset="70%" stop-color="#ffb000"/><stop offset="100%" stop-color="#b87e1e"/></radialGradient>' +
+      '<radialGradient id="grad-a" cx="35%" cy="30%"><stop offset="0%" stop-color="#ff9c80"/><stop offset="70%" stop-color="#ff5533"/><stop offset="100%" stop-color="#b83a22"/></radialGradient>' +
+      '</defs>');
+    var i, r, c, x, y;
+    for (i = 0; i < SIZE; i++) {
+      var p0 = PAD, p1 = PAD + (SIZE - 1) * U, q = PAD + i * U;
+      parts.push('<line class="gridline" x1="' + p0 + '" y1="' + q + '" x2="' + p1 + '" y2="' + q + '"/>');
+      parts.push('<line class="gridline" x1="' + q + '" y1="' + p0 + '" x2="' + q + '" y2="' + p1 + '"/>');
+    }
+    var stars = STARS[SIZE];
+    for (i = 0; i < stars.length; i++) for (var j = 0; j < stars.length; j++) {
+      parts.push('<circle class="star" cx="' + (PAD + stars[j] * U) + '" cy="' + (PAD + stars[i] * U) + '" r="2.6"/>');
+    }
+    // territory at game end
+    if (finalScore) {
+      ["p", "a"].forEach(function (col) {
+        finalScore.terr[col].forEach(function (t) {
+          var tr = Math.floor(t / SIZE), tc = t % SIZE;
+          parts.push('<rect class="terr ' + col + '" x="' + (PAD + tc * U - 4) + '" y="' + (PAD + tr * U - 4) + '" width="8" height="8"/>');
+        });
+      });
+    }
+    for (i = 0; i < SIZE * SIZE; i++) {
+      if (!state.b[i]) continue;
+      r = Math.floor(i / SIZE); c = i % SIZE;
+      x = PAD + c * U; y = PAD + r * U;
+      parts.push('<circle class="stone ' + state.b[i] + '" cx="' + x + '" cy="' + y + '" r="' + (U * 0.46) + '"/>');
+      if (i === state.last) parts.push('<circle class="lastdot" cx="' + x + '" cy="' + y + '" r="' + (U * 0.13) + '"/>');
+    }
+    svg.setAttribute("viewBox", "0 0 " + w + " " + w);
+    svg.innerHTML = parts.join("");
+    statCaps.textContent = "captures " + state.caps.p + " : " + state.caps.a;
+  }
+
+  svg.addEventListener("click", function (e) {
+    if (gameOver || thinking || state.turn !== "p") return;
+    var rect = svg.getBoundingClientRect();
+    var scale = rect.width / (PAD * 2 + (SIZE - 1) * U);
+    var gx = (e.clientX - rect.left) / scale - PAD;
+    var gy = (e.clientY - rect.top) / scale - PAD;
+    var c = Math.round(gx / U), r = Math.round(gy / U);
+    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return;
+    var i = r * SIZE + c;
+    if (Math.abs(gx - c * U) > U * 0.45 || Math.abs(gy - r * U) > U * 0.45) return;
+    playerAt(i);
+  });
+
+  function snapshot() {
+    snapshots.push({ state: { b: state.b.slice(), turn: state.turn, ko: state.ko,
+                              passes: state.passes, caps: { p: state.caps.p, a: state.caps.a },
+                              last: state.last } });
+  }
+
+  function playerAt(i) {
+    var ns = tryMove(state, i, "p");
+    if (!ns) {
+      setStatus(i === state.ko ? "illegal — ko" : "illegal move", "dim");
+      return;
+    }
+    snapshot();
+    hintEl.textContent = "";
+    state = ns;
+    render();
+    aiTurn();
+  }
+
+  function playerPass() {
+    if (gameOver || thinking || state.turn !== "p") return;
+    snapshot();
+    state = passMove(state, "p");
+    hintEl.textContent = "note: stones left on the board count as alive — capture dead groups before passing.";
+    render();
+    if (state.passes >= 2) { endGame(); return; }
+    aiTurn();
+  }
+
+  function aiTurn() {
+    thinking = true;
+    setStatus("thinking...", "dim");
+    setTimeout(function () {
+      var move;
+      if (level === 1) move = bestMoveHeur(state, "a");
+      else {
+        var per = level === 2 ? (SIZE === 9 ? 16 : 8) : (SIZE === 9 ? 40 : 16);
+        move = bestMoveMC(state, "a", per);
+      }
+      if (move === -1) {
+        state = passMove(state, "a");
+        thinking = false;
+        render();
+        if (state.passes >= 2) { endGame(); return; }
+        setStatus("machine passes — your move", "dim");
+      } else {
+        state = tryMove(state, move, "a");
+        thinking = false;
+        render();
+        setStatus("your move", "");
+      }
+    }, 120);
+  }
+
+  function endGame() {
+    gameOver = true;
+    finalScore = scoreBoard(state.b);
+    var diff = Math.abs(finalScore.p - finalScore.a);
+    var text, cls;
+    if (finalScore.p > finalScore.a) { text = "you win by " + diff + "  (" + finalScore.p + " : " + finalScore.a + ")"; cls = ""; }
+    else { text = "machine wins by " + diff + "  (" + finalScore.p + " : " + finalScore.a + ")"; cls = "red"; }
+    setStatus(text, cls);
+    hintEl.textContent = "area scoring: stones + territory, komi " + KOMI + " to the machine.";
+    render();
+  }
+
+  function undo() {
+    if (!snapshots.length || thinking) return;
+    var snap = snapshots.pop();
+    state = snap.state;
+    gameOver = false;
+    finalScore = null;
+    hintEl.textContent = "";
+    setStatus("your move", "");
+    render();
+  }
+
+  // ---------- controls ----------
+  level = 2;
+  document.getElementById("btn-new").addEventListener("click", newGame);
+  document.getElementById("btn-undo").addEventListener("click", undo);
+  document.getElementById("btn-pass").addEventListener("click", playerPass);
+  btnLvl.addEventListener("click", function () {
+    level = level % 3 + 1;
+    btnLvl.textContent = "[lvl: " + level + "]";
+  });
+  btnSize.addEventListener("click", function () {
+    SIZE = SIZE === 9 ? 13 : 9;
+    btnSize.textContent = "[size: " + SIZE + "]";
+    newGame();
+  });
+
+  var rulesOverlay = document.getElementById("rulesOverlay");
+  function openRules() { rulesOverlay.hidden = false; }
+  function closeRules() { rulesOverlay.hidden = true; }
+  document.getElementById("btn-rules").addEventListener("click", openRules);
+  document.getElementById("btn-rules-close").addEventListener("click", closeRules);
+  rulesOverlay.addEventListener("click", function (e) { if (e.target === rulesOverlay) closeRules(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !rulesOverlay.hidden) closeRules();
+  });
+
+  newGame();
+
+  // when embedded in the terminal, the back-link is redundant — disable it
+  if (window.self !== window.top) {
+    var back = document.querySelector(".statusbar a");
+    if (back) back.removeAttribute("href");
+  }
+})();
+</script>
+</body>
+</html>

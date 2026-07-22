@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="chat-shortcut.js"></script>
+<title>Mahjong Solitaire</title>
+<style>
+  :root{
+    --lacquer:#2b1216;
+    --lacquer-2:#40191f;
+    --felt:#123c2e;
+    --ivory:#f7f0dd;
+    --ivory-2:#e9ddc0;
+    --side:#c9b98f;
+    --side-dark:#a8945f;
+    --ink:#22303a;
+    --gold:#c9a25e;
+    --cinnabar:#b93a2b;
+    --jade:#2e7d5b;
+    --blue:#1b4b8a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, var(--lacquer-2), transparent 70%),
+      var(--lacquer);
+    color:var(--ivory);
+    font-family:Georgia, 'Times New Roman', serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; overflow-x:hidden;
+  }
+  header{
+    width:100%; max-width:920px;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:12px; padding:14px 18px 10px;
+    border-bottom:1px solid rgba(201,162,94,.35);
+  }
+  h1{
+    font-size:22px; font-weight:normal; letter-spacing:.14em; color:var(--gold);
+    text-transform:uppercase;
+  }
+  h1 span{color:var(--ivory); opacity:.85;}
+  .hud{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;}
+  .stat{
+    font-family:'Courier New', monospace; font-size:15px;
+    background:rgba(0,0,0,.28); border:1px solid rgba(201,162,94,.35);
+    padding:6px 10px; border-radius:6px; min-width:86px; text-align:center;
+  }
+  .stat b{color:var(--gold); font-weight:normal;}
+  button.ctl{
+    font-family:Georgia, serif; font-size:14px; letter-spacing:.06em;
+    color:var(--ivory); background:linear-gradient(#5a2730,#40191f);
+    border:1px solid var(--gold); border-radius:6px;
+    padding:7px 14px; cursor:pointer;
+  }
+  button.ctl:hover{background:linear-gradient(#6b2f39,#4c1f26);}
+  button.ctl:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+  #stage{
+    position:relative; margin:10px auto 24px;
+    transform-origin:top center;
+  }
+  #board{position:relative;}
+  .tile{
+    position:absolute; width:64px; height:86px;
+    background:none; border:none; padding:0; cursor:default;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tile svg{display:block; width:100%; height:100%;}
+  .tile.free{cursor:pointer;}
+  .tile.free:hover .top, .tile.free:focus-visible .top{filter:brightness(1.05);}
+  .tile.free:focus-visible{outline:2px solid var(--gold); outline-offset:1px;}
+  .tile.selected .top{stroke:var(--cinnabar); stroke-width:3;}
+  .tile.selected .faceBg{fill:#fde8c8;}
+  .tile.shake{animation:shake .25s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);}
+    50%{transform:translateX(3px);} 75%{transform:translateX(-2px);}
+  }
+  .tile.vanish{animation:vanish .28s forwards;}
+  @keyframes vanish{to{transform:scale(.4); opacity:0;}}
+  @media (prefers-reduced-motion: reduce){
+    .tile.shake, .tile.vanish{animation-duration:.01s;}
+  }
+  /* PAUSE: blank every tile face */
+  #board.paused .face{visibility:hidden;}
+  #board.paused .tile{pointer-events:none;}
+  .overlay{
+    position:absolute; inset:0; z-index:99999;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; background:rgba(24,9,11,.72); border-radius:10px;
+    text-align:center; padding:20px;
+  }
+  .overlay h2{color:var(--gold); font-size:30px; letter-spacing:.1em; font-weight:normal;}
+  .overlay p{font-size:16px; max-width:420px; line-height:1.5;}
+  .hidden{display:none !important;}
+  footer{
+    margin-top:auto; padding:10px; font-size:12px; opacity:.55; letter-spacing:.05em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mah<span>jong</span></h1>
+  <div class="hud">
+    <div class="stat">⏱ <b id="clock">00:00</b></div>
+    <div class="stat">Tiles <b id="tilesLeft">144</b></div>
+    <div class="stat">Moves <b id="movesLeft">–</b></div>
+    <button class="ctl" id="pauseBtn">Pause</button>
+    <button class="ctl" id="newBtn">New game</button>
+  </div>
+</header>
+
+<div id="stage">
+  <div id="board"></div>
+  <div class="overlay hidden" id="pauseOverlay">
+    <h2>Paused</h2>
+    <p>The tiles are hidden. No peeking.</p>
+    <button class="ctl" id="resumeBtn">Resume</button>
+  </div>
+  <div class="overlay hidden" id="stuckOverlay">
+    <h2>No moves left</h2>
+    <p>There are still tiles on the board, but none of the free ones match.</p>
+    <div style="display:flex; gap:10px;">
+      <button class="ctl" id="shuffleBtn">Shuffle remaining</button>
+      <button class="ctl" id="stuckNewBtn">New game</button>
+    </div>
+  </div>
+  <div class="overlay hidden" id="winOverlay">
+    <h2>Board cleared</h2>
+    <p id="winText"></p>
+    <button class="ctl" id="winNewBtn">Play again</button>
+  </div>
+</div>
+
+<!-- shared SVG defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="ivoryGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbf6e8"/>
+      <stop offset="1" stop-color="#ecdfc0"/>
+    </linearGradient>
+    <linearGradient id="sideGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d6c69b"/>
+      <stop offset="1" stop-color="#a8945f"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<footer>Match free tiles: nothing on top, open on the left or the right.</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- layout: the classic turtle, 144 positions ---------- */
+  const POS = [];
+  function row(y, x0, x1, z){ for(let x=x0; x<=x1; x++) POS.push([x,y,z]); }
+  row(0,1,12,0); row(1,3,10,0); row(2,2,11,0); row(3,1,12,0);
+  row(4,1,12,0); row(5,2,11,0); row(6,3,10,0); row(7,1,12,0);
+  POS.push([0,3.5,0],[13,3.5,0],[14,3.5,0]);
+  for(let y=1;y<=6;y++) row(y,4,9,1);
+  for(let y=2;y<=5;y++) row(y,5,8,2);
+  for(let y=3;y<=4;y++) row(y,6,7,3);
+  POS.push([6.5,3.5,4]);   // crown tile
+
+  const TW=56, TH=72, DX=6, DY=8;           // cell size + per-layer 3D shift
+  const BOARD_W = 14*TW + 64 + 24;
+  const BOARD_H = 7*TH + 86 + 40;
+
+  /* ---------- tile faces ---------- */
+  const NUM = ['一','二','三','四','五','六','七','八','九'];
+  const DOTC = ['#b93a2b','#2e7d5b','#1b4b8a'];
+
+  // spot layouts (x,y in a 48x56 face box, origin at face top-left)
+  const SPOTS = {
+    1:[[24,28]],
+    2:[[14,14],[34,42]],
+    3:[[12,10],[24,28],[36,46]],
+    4:[[13,13],[35,13],[13,43],[35,43]],
+    5:[[12,11],[36,11],[24,28],[12,45],[36,45]],
+    6:[[14,10],[34,10],[14,28],[34,28],[14,46],[34,46]],
+    7:[[10,8],[24,14],[38,20],[14,34],[34,34],[14,48],[34,48]],
+    8:[[14,8],[34,8],[14,21],[34,21],[14,35],[34,35],[14,48],[34,48]],
+    9:[[12,10],[24,10],[36,10],[12,28],[24,28],[36,28],[12,46],[24,46],[36,46]]
+  };
+
+  function dots(n){
+    const r = n===1?11 : n<=4?7.5 : n<=6?6.5 : 5.5;
+    return SPOTS[n].map(function(p,i){
+      const c = n===1 ? '#b93a2b' : DOTC[i%3];
+      return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+r+'" fill="none" stroke="'+c+'" stroke-width="2.4"/>' +
+             '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="'+(r*0.42)+'" fill="'+c+'"/>';
+    }).join('');
+  }
+
+  function stick(x,y,c){
+    return '<g stroke="'+c+'">'+
+      '<rect x="'+(x-3)+'" y="'+(y-8)+'" width="6" height="16" rx="2.6" fill="none" stroke-width="2.2"/>'+
+      '<line x1="'+(x-3)+'" y1="'+y+'" x2="'+(x+3)+'" y2="'+y+'" stroke-width="1.6"/>'+
+      '</g>';
+  }
+  function bamboo(n){
+    if(n===1){
+      return '<g stroke="#2e7d5b">'+
+        '<rect x="19" y="6" width="10" height="44" rx="4.5" fill="none" stroke-width="3"/>'+
+        '<line x1="19" y1="20" x2="29" y2="20" stroke-width="2.2"/>'+
+        '<line x1="19" y1="34" x2="29" y2="34" stroke-width="2.2"/>'+
+        '</g>';
+    }
+    return SPOTS[n].map(function(p,i){ return stick(p[0], p[1], DOTC[(i+1)%3]); }).join('');
+  }
+
+  function bigChar(ch, color, size, x, y){
+    return '<text x="'+x+'" y="'+y+'" font-size="'+size+'" fill="'+color+'" text-anchor="middle" '+
+           'font-family="\'Songti SC\',\'SimSun\',\'Noto Serif CJK SC\',serif" font-weight="bold">'+ch+'</text>';
+  }
+  function corner(txt, color){
+    return '<text x="4" y="11" font-size="10" fill="'+color+'" font-family="Georgia,serif" font-weight="bold">'+txt+'</text>';
+  }
+
+  function faceSVG(code){
+    const kind = code[0], v = code.slice(1);
+    if(kind==='d') return dots(+v);
+    if(kind==='b') return bamboo(+v);
+    if(kind==='c') return bigChar(NUM[+v-1],'#1b4b8a',24,24,24) + bigChar('萬','#b93a2b',24,24,50) + corner(v,'#1b4b8a');
+    if(kind==='w'){
+      const map={E:'東',S:'南',W:'西',N:'北'};
+      return bigChar(map[v],'#22303a',34,24,40) + corner(v,'#22303a');
+    }
+    if(kind==='r'){ // dragons: rR rG rW
+      if(v==='R') return bigChar('中','#b93a2b',34,24,40);
+      if(v==='G') return bigChar('發','#2e7d5b',34,24,40);
+      return '<rect x="8" y="8" width="32" height="40" rx="4" fill="none" stroke="#1b4b8a" stroke-width="3"/>';
+    }
+    if(kind==='f'){
+      const map={1:'梅',2:'蘭',3:'菊',4:'竹'};
+      return bigChar(map[v],'#b93a2b',30,24,38) + corner(v,'#c9a25e');
+    }
+    if(kind==='s'){
+      const map={1:'春',2:'夏',3:'秋',4:'冬'};
+      return bigChar(map[v],'#2e7d5b',30,24,38) + corner(v,'#c9a25e');
+    }
+    return '';
+  }
+
+  function tileSVG(code){
+    return '<svg viewBox="0 0 64 86" aria-hidden="true">'+
+      '<rect x="6" y="8" width="58" height="78" rx="8" fill="url(#sideGrad)"/>'+
+      '<rect class="top faceBg" x="0" y="0" width="58" height="78" rx="8" fill="url(#ivoryGrad)" stroke="#b9a878" stroke-width="1.5"/>'+
+      '<g class="face" transform="translate(5,11)">'+ faceSVG(code) +'</g>'+
+      '</svg>';
+  }
+
+  /* ---------- tile codes: 144 as 72 matching pairs ---------- */
+  function basePairs(){
+    const pairs=[];
+    const suits=[];
+    for(let i=1;i<=9;i++){ suits.push('d'+i,'b'+i,'c'+i); }
+    ['wE','wS','wW','wN','rR','rG','rW'].forEach(function(c){ suits.push(c); });
+    suits.forEach(function(c){ pairs.push([c,c],[c,c]); });
+    pairs.push(['f1','f2'],['f3','f4'],['s1','s2'],['s3','s4']);
+    return pairs; // 34*2 + 4 = 72 pairs
+  }
+
+  function shuffle(a){
+    for(let i=a.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      const t=a[i]; a[i]=a[j]; a[j]=t;
+    }
+    return a;
+  }
+
+  /* ---------- free-tile logic ---------- */
+  function overlapsXY(a,b){ return Math.abs(a.x-b.x)<0.99 && Math.abs(a.y-b.y)<0.99; }
+  function isFree(t, tiles){
+    for(let i=0;i<tiles.length;i++){
+      const o=tiles[i];
+      if(o===t || o.removed) continue;
+      if(o.z===t.z+1 && overlapsXY(t,o)) return false;      // covered
+    }
+    let L=false, R=false;
+    for(let i=0;i<tiles.length;i++){
+      const o=tiles[i];
+      if(o===t || o.removed || o.z!==t.z) continue;
+      if(Math.abs(o.y-t.y)<0.99){
+        if(Math.abs(o.x-(t.x-1))<0.01) L=true;
+        if(Math.abs(o.x-(t.x+1))<0.01) R=true;
+      }
+    }
+    return !(L&&R);
+  }
+
+  function codesMatch(a,b){
+    if(a===b) return true;
+    if(a[0]==='f'&&b[0]==='f') return true;
+    if(a[0]==='s'&&b[0]==='s') return true;
+    return false;
+  }
+
+  /* ---------- solvable dealing (reverse removal) ---------- */
+  function dealSolvable(positions, pairs){
+    for(let attempt=0; attempt<60; attempt++){
+      const tiles = positions.map(function(p){ return {x:p[0],y:p[1],z:p[2],removed:false}; });
+      const order = shuffle(pairs.slice());
+      let ok=true;
+      for(let k=0;k<order.length;k++){
+        const free = tiles.filter(function(t){ return !t.removed && isFree(t,tiles); });
+        if(free.length<2){ ok=false; break; }
+        shuffle(free);
+        free[0].code=order[k][0]; free[0].removed=true;
+        free[1].code=order[k][1]; free[1].removed=true;
+      }
+      if(ok){
+        tiles.forEach(function(t){ t.removed=false; });
+        return tiles;
+      }
+    }
+    // fallback: random assignment (may not be solvable, practically never reached)
+    const flat = shuffle(pairs.reduce(function(a,p){ return a.concat(p); },[]));
+    return positions.map(function(p,i){ return {x:p[0],y:p[1],z:p[2],removed:false,code:flat[i]}; });
+  }
+
+  /* ---------- game state ---------- */
+  const board = document.getElementById('board');
+  const stage = document.getElementById('stage');
+  let tiles=[], selected=null, paused=false;
+  let seconds=0, ticker=null, finished=false;
+
+  function fmt(s){
+    const m=Math.floor(s/60), r=s%60;
+    return (m<10?'0':'')+m+':'+(r<10?'0':'')+r;
+  }
+  function startClock(){
+    stopClock();
+    ticker=setInterval(function(){ seconds++; document.getElementById('clock').textContent=fmt(seconds); },1000);
+  }
+  function stopClock(){ if(ticker){ clearInterval(ticker); ticker=null; } }
+
+  function zIndexOf(t){ return t.z*10000 + Math.round(t.y*2)*40 + Math.round(t.x*2); }
+
+  function render(){
+    board.innerHTML='';
+    board.style.width=BOARD_W+'px';
+    board.style.height=BOARD_H+'px';
+    tiles.forEach(function(t){
+      if(t.removed) return;
+      const el=document.createElement('button');
+      el.className='tile';
+      el.style.left=(12 + t.x*TW + t.z*DX)+'px';
+      el.style.top =(20 + t.y*TH - t.z*DY)+'px';
+      el.style.zIndex=zIndexOf(t);
+      el.innerHTML=tileSVG(t.code);
+      el.setAttribute('aria-label','tile');
+      el.addEventListener('click', function(){ onTile(t); });
+      t.el=el;
+      board.appendChild(el);
+    });
+    refreshFree();
+  }
+
+  function refreshFree(){
+    let freeTiles=[];
+    tiles.forEach(function(t){
+      if(t.removed || !t.el) return;
+      const f=isFree(t,tiles);
+      t.free=f;
+      t.el.classList.toggle('free',f);
+      t.el.tabIndex = f ? 0 : -1;
+      if(f) freeTiles.push(t);
+    });
+    // count available matching moves
+    let moves=0;
+    for(let i=0;i<freeTiles.length;i++)
+      for(let j=i+1;j<freeTiles.length;j++)
+        if(codesMatch(freeTiles[i].code, freeTiles[j].code)) moves++;
+    const left = tiles.filter(function(t){ return !t.removed; }).length;
+    document.getElementById('tilesLeft').textContent=left;
+    document.getElementById('movesLeft').textContent=moves;
+
+    if(left===0){ win(); }
+    else if(moves===0){ stuck(); }
+  }
+
+  function onTile(t){
+    if(paused || finished || t.removed) return;
+    if(!t.free){
+      t.el.classList.remove('shake'); void t.el.offsetWidth; t.el.classList.add('shake');
+      return;
+    }
+    if(selected===t){
+      t.el.classList.remove('selected'); selected=null; return;
+    }
+    if(selected && codesMatch(selected.code, t.code)){
+      const a=selected, b=t; selected=null;
+      a.removed=true; b.removed=true;
+      a.el.classList.add('vanish'); b.el.classList.add('vanish');
+      setTimeout(function(){
+        if(a.el){a.el.remove(); a.el=null;}
+        if(b.el){b.el.remove(); b.el=null;}
+        refreshFree();
+      },280);
+    }else{
+      if(selected && selected.el) selected.el.classList.remove('selected');
+      selected=t;
+      t.el.classList.add('selected');
+    }
+  }
+
+  /* ---------- overlays ---------- */
+  function show(id){ document.getElementById(id).classList.remove('hidden'); }
+  function hide(id){ document.getElementById(id).classList.add('hidden'); }
+
+  function win(){
+    finished=true; stopClock();
+    document.getElementById('winText').textContent='You cleared all 144 tiles in '+fmt(seconds)+'.';
+    show('winOverlay');
+  }
+  function stuck(){
+    if(finished) return;
+    show('stuckOverlay');
+  }
+
+  function shuffleRemaining(){
+    hide('stuckOverlay');
+    const remaining = tiles.filter(function(t){ return !t.removed; });
+    // rebuild matching pairs from the remaining faces
+    const byCode={}, flowers=[], seasons=[];
+    remaining.forEach(function(t){
+      if(t.code[0]==='f') flowers.push(t.code);
+      else if(t.code[0]==='s') seasons.push(t.code);
+      else (byCode[t.code]=byCode[t.code]||[]).push(t.code);
+    });
+    const pairs=[];
+    Object.keys(byCode).forEach(function(c){
+      const arr=byCode[c];
+      for(let i=0;i<arr.length;i+=2) pairs.push([c,c]);
+    });
+    for(let i=0;i<flowers.length;i+=2) pairs.push([flowers[i],flowers[i+1]]);
+    for(let i=0;i<seasons.length;i+=2) pairs.push([seasons[i],seasons[i+1]]);
+
+    const pos = remaining.map(function(t){ return [t.x,t.y,t.z]; });
+    const fresh = dealSolvable(pos, pairs);
+    tiles = fresh;
+    selected=null;
+    render();
+  }
+
+  /* ---------- pause ---------- */
+  function setPaused(p){
+    if(finished) return;
+    paused=p;
+    board.classList.toggle('paused',p);
+    document.getElementById('pauseBtn').textContent = p ? 'Resume' : 'Pause';
+    if(p){ stopClock(); show('pauseOverlay'); }
+    else { startClock(); hide('pauseOverlay'); }
+    if(selected && selected.el){ selected.el.classList.remove('selected'); selected=null; }
+  }
+
+  /* ---------- new game ---------- */
+  function newGame(){
+    hide('winOverlay'); hide('stuckOverlay'); hide('pauseOverlay');
+    board.classList.remove('paused');
+    document.getElementById('pauseBtn').textContent='Pause';
+    finished=false; paused=false; selected=null; seconds=0;
+    document.getElementById('clock').textContent='00:00';
+    tiles = dealSolvable(POS, basePairs());
+    render();
+    startClock();
+  }
+
+  /* ---------- responsive scale ---------- */
+  function rescale(){
+    const s=Math.min(1,(window.innerWidth-16)/BOARD_W);
+    stage.style.transform='scale('+s+')';
+    stage.style.width=BOARD_W+'px';
+    stage.style.height=(BOARD_H*s)+'px';
+  }
+  window.addEventListener('resize',rescale);
+
+  /* ---------- wire up ---------- */
+  document.getElementById('pauseBtn').addEventListener('click',function(){ setPaused(!paused); });
+  document.getElementById('resumeBtn').addEventListener('click',function(){ setPaused(false); });
+  document.getElementById('newBtn').addEventListener('click',newGame);
+  document.getElementById('stuckNewBtn').addEventListener('click',newGame);
+  document.getElementById('winNewBtn').addEventListener('click',newGame);
+  document.getElementById('shuffleBtn').addEventListener('click',shuffleRemaining);
+
+  rescale();
+  newGame();
+})();
+</script>
+</body>
+</html>
