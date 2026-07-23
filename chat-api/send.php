@@ -28,7 +28,7 @@ handle_request(function (PDO $pdo) {
     $lastTime = new DateTime((string)$last);
     $now = new DateTime();
     $elapsed = ($now->getTimestamp() - $lastTime->getTimestamp())
-      + (((int)$now->format('u') - (int)$lastTime->format('u')) / 1_000_000);
+      + (((int)$now->format('u') - (int)$lastTime->format('u')) / 1000000);
     if ($elapsed < 1.5) json_error('slow down — sending too fast', 429);
   }
 
