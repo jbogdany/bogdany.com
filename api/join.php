@@ -5,6 +5,7 @@ require_once __DIR__ . '/common.php';
 handle_request(function (PDO $pdo) {
   $body = read_json_body();
   $room = strtoupper(trim((string)($body['room'] ?? '')));
+  $name = sz_clean_name((string)($body['name'] ?? ''));
   if ($room === '') json_error('room code is required', 400);
 
   $pdo->beginTransaction();
@@ -17,8 +18,8 @@ handle_request(function (PDO $pdo) {
   if ($game['blue_token'] !== null) { $pdo->rollBack(); json_error('that game already has two players', 409); }
 
   $blueToken = gen_token();
-  $stmt = $pdo->prepare('UPDATE games SET blue_token = ?, status = "active" WHERE id = ?');
-  $stmt->execute([$blueToken, $game['id']]);
+  $stmt = $pdo->prepare('UPDATE games SET blue_token = ?, blue_name = ?, status = "active" WHERE id = ?');
+  $stmt->execute([$blueToken, $name, $game['id']]);
 
   $pdo->commit();
 

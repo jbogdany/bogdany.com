@@ -208,6 +208,23 @@
     padding:4px 0 2px;
   }
 
+  .lobby-title{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:#8a6a2f;margin:14px 0 6px;
+  }
+  .lobby-list{
+    display:flex;flex-direction:column;gap:6px;
+    max-height:220px;overflow-y:auto;
+    margin-bottom:4px;
+  }
+  .lobby-row{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:8px 10px;border-radius:8px;
+    background:#f5ecd6;border:1px solid #e2d3a8;
+  }
+  .lobby-label{font-size:12.5px;color:#5c4a26;line-height:1.35;}
+  .lobby-btn{width:auto;flex:none;margin:0;padding:6px 10px;font-size:12px;}
+
   /* ---------- Board area ---------- */
   .board-col{display:flex;flex-direction:column;align-items:center;}
 
@@ -409,9 +426,13 @@
               <button class="btn-secondary" id="onlineReconnectBtn">Reconnect to last game</button>
             </div>
             <div class="hint" id="onlineSetupMsg"></div>
+            <div class="lobby-title">Open Games</div>
+            <div class="lobby-list" id="lobbyList">
+              <div class="hint">Loading…</div>
+            </div>
           </div>
           <div id="onlineRoomInfo" style="display:none;">
-            <div class="hint">Room code — share it with your opponent</div>
+            <div class="hint" id="onlineRoomCodeHint">Room code — share it with your opponent</div>
             <div class="room-code" id="onlineRoomCodeDisplay"></div>
             <div class="hint" id="onlineYouAre"></div>
             <div class="hint" id="onlineStatusMsg"></div>
@@ -683,6 +704,10 @@
   const API_BASE = 'api/';
   let onlineGameId = null, onlineToken = null, onlineColor = null, onlineRoomCode = null;
   let onlinePollTimer = null, onlineMoveNumber = -1;
+  let onlineRedName = null, onlineBlueName = null;
+  let spectating = false;
+  let lobbyPollTimer = null;
+  let myDisplayName = null;
 
   function freshBoard(){
     const b = [];
@@ -771,6 +796,7 @@
 
   function selectSquare(r,c){
     if(gameOver || aiThinking) return;
+    if(mode === 'online' && spectating) return; // read-only
     if(mode === 'computer' && current === computerColor) return; // not the human's turn
     if(mode === 'online' && (!onlineGameId || current !== onlineColor)) return; // not connected, or not your turn
 
@@ -879,7 +905,7 @@
         if(piece){
           sq.innerHTML = pieceSVG(piece);
           const notMyComputerTurn = (mode==='computer' && current===computerColor);
-          const notMyOnlineTurn = (mode==='online' && (!onlineGameId || current!==onlineColor));
+          const notMyOnlineTurn = (mode==='online' && (spectating || !onlineGameId || current!==onlineColor));
           if(!gameOver && !aiThinking && piece.color === current && !notMyComputerTurn && !notMyOnlineTurn){
             sq.classList.add('clickable-own');
           }
@@ -893,9 +919,12 @@
     const dot = document.getElementById('statusDot');
     const text = document.getElementById('statusText');
     dot.className = 'status-dot ' + current + (aiThinking ? ' thinking' : '');
-    let label = (current===RED?'Red':'Blue') + ' to move';
+    const redLabel = onlineRedName || 'Red', blueLabel = onlineBlueName || 'Blue';
+    let label = (current===RED?redLabel:blueLabel) + ' to move';
     if(mode==='computer'){
       label += current===computerColor ? ' (computer)' : ' (you)';
+    } else if(mode==='online' && spectating){
+      label += ' \u2014 spectating';
     } else if(mode==='online' && onlineGameId){
       label += current===onlineColor ? ' (you)' : " (opponent)";
     }
@@ -927,10 +956,13 @@
     newGameBtn.style.display = mode==='online' ? 'none' : '';
     updateModeVisibleControls();
     stopOnlinePolling();
+    stopLobbyPolling();
     if(mode === 'online'){
       enterOnlineSetup();
     } else {
+      spectating = false;
       onlineGameId = null; onlineToken = null; onlineColor = null; onlineRoomCode = null;
+      onlineRedName = null; onlineBlueName = null;
       newGame();
     }
   });
@@ -1011,6 +1043,31 @@
     return data;
   }
 
+  // ---------- who's playing ----------
+  // Same identity the rest of the site uses: the real account username
+  // if logged in, otherwise the guest name the terminal already assigned
+  // this browser (bogdany-guest-name — a plain, readable cookie; only
+  // the account session cookie is HttpOnly). Resolved once and cached —
+  // it can't change mid-visit without a login/logout, which reloads
+  // the whole terminal page anyway.
+  function getCookie(name){
+    const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\[\]\\\/+^])/g,'\\$1') + '=([^;]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  async function resolvePlayerName(){
+    if(myDisplayName) return myDisplayName;
+    try {
+      const res = await fetch('auth-api/me.php', { credentials: 'same-origin' });
+      const data = await res.json();
+      if(data && data.user && data.user.username){
+        myDisplayName = data.user.username;
+        return myDisplayName;
+      }
+    } catch(e){ /* not logged in, or auth-api unreachable — fall back below */ }
+    myDisplayName = getCookie('bogdany-guest-name') || ('guest' + Math.random().toString(16).slice(2,8));
+    return myDisplayName;
+  }
+
   function saveOnlineSession(){
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -1029,6 +1086,7 @@
   }
 
   function enterOnlineSetup(){
+    spectating = false;
     document.getElementById('onlineSetup').style.display = 'block';
     document.getElementById('onlineRoomInfo').style.display = 'none';
     onlineMsg('');
@@ -1040,13 +1098,24 @@
     selected = null; legalMoves = [];
     document.getElementById('winbar').classList.remove('show');
     render();
+    startLobbyPolling();
   }
 
   function showOnlineRoom(){
+    stopLobbyPolling();
     document.getElementById('onlineSetup').style.display = 'none';
     document.getElementById('onlineRoomInfo').style.display = 'block';
     document.getElementById('onlineRoomCodeDisplay').textContent = onlineRoomCode;
-    document.getElementById('onlineYouAre').textContent = 'You are playing ' + (onlineColor === RED ? 'Red' : 'Blue') + '.';
+    document.getElementById('onlineRoomCodeHint').style.display = spectating ? 'none' : 'block';
+    document.getElementById('onlineRoomCodeDisplay').style.display = spectating ? 'none' : 'block';
+    const leaveBtn = document.getElementById('onlineLeaveBtn');
+    if(spectating){
+      document.getElementById('onlineYouAre').textContent = 'Spectating \u2014 you can watch, but not play.';
+      leaveBtn.textContent = 'Stop Watching';
+    } else {
+      document.getElementById('onlineYouAre').textContent = 'You are playing ' + (onlineColor === RED ? 'Red' : 'Blue') + '.';
+      leaveBtn.textContent = 'Leave Game';
+    }
   }
 
   function applyServerState(data){
@@ -1062,11 +1131,18 @@
       selected = null; legalMoves = [];
     }
     onlineMoveNumber = data.move_number;
+    onlineRedName = data.red_name || 'Red';
+    onlineBlueName = data.blue_name || null;
 
     const statusEl = document.getElementById('onlineStatusMsg');
     if(statusEl){
-      if(data.status === 'waiting') statusEl.textContent = 'Waiting for an opponent to join with this code…';
-      else if(data.status === 'finished') statusEl.textContent = (data.winner === RED ? 'Red' : 'Blue') + ' won this game.';
+      const redLabel = onlineRedName || 'Red', blueLabel = onlineBlueName || 'Blue';
+      if(spectating){
+        statusEl.textContent = data.status === 'finished'
+          ? (data.winner === RED ? redLabel : blueLabel) + ' won this game.'
+          : (current === RED ? redLabel : blueLabel) + ' to move.';
+      } else if(data.status === 'waiting') statusEl.textContent = 'Waiting for an opponent to join with this code…';
+      else if(data.status === 'finished') statusEl.textContent = (data.winner === RED ? redLabel : blueLabel) + ' won this game.';
       else statusEl.textContent = current === onlineColor ? 'Your move.' : "Waiting for opponent's move…";
     }
 
@@ -1081,7 +1157,8 @@
   async function createOnlineGame(){
     onlineMsg('Creating game…');
     try {
-      const data = await apiPost('create.php', {});
+      const name = await resolvePlayerName();
+      const data = await apiPost('create.php', { name });
       onlineGameId = data.game_id; onlineToken = data.token;
       onlineColor = data.color; onlineRoomCode = data.room_code;
       saveOnlineSession();
@@ -1093,7 +1170,8 @@
   async function joinOnlineGame(code){
     onlineMsg('Joining…');
     try {
-      const data = await apiPost('join.php', { room: code });
+      const name = await resolvePlayerName();
+      const data = await apiPost('join.php', { room: code, name });
       onlineGameId = data.game_id; onlineToken = data.token;
       onlineColor = data.color; onlineRoomCode = data.room_code;
       saveOnlineSession();
@@ -1105,23 +1183,38 @@
   function reconnectOnlineGame(){
     const s = loadOnlineSession();
     if(!s) return;
+    spectating = false;
     onlineGameId = s.gameId; onlineToken = s.token;
     onlineColor = s.color; onlineRoomCode = s.room;
     showOnlineRoom();
     startOnlinePolling();
   }
 
+  function watchGame(g){
+    spectating = true;
+    onlineGameId = g.game_id; onlineToken = null; onlineColor = null; onlineRoomCode = g.room_code;
+    onlineMoveNumber = -1;
+    onlineRedName = g.red_name; onlineBlueName = g.blue_name;
+    showOnlineRoom();
+    startOnlinePolling();
+  }
+
   function leaveOnlineGame(){
     stopOnlinePolling();
+    const wasSpectating = spectating;
+    spectating = false;
     onlineGameId = null; onlineToken = null; onlineColor = null; onlineRoomCode = null;
-    clearOnlineSession();
+    onlineRedName = null; onlineBlueName = null;
+    if(!wasSpectating) clearOnlineSession(); // never touch a real reconnect session just because we were watching someone else
     enterOnlineSetup();
   }
 
   async function pollOnlineState(){
     if(!onlineGameId) return;
     try {
-      const data = await apiGet('state.php', { game_id: onlineGameId, token: onlineToken });
+      const data = spectating
+        ? await apiGet('spectate.php', { game_id: onlineGameId })
+        : await apiGet('state.php', { game_id: onlineGameId, token: onlineToken });
       applyServerState(data);
     } catch(e){ /* transient network hiccup — try again next tick */ }
   }
@@ -1146,6 +1239,57 @@
       onlineMsg(e.message);
       pollOnlineState(); // resync with server truth in case the move was rejected
     }
+  }
+
+  // ---------- lobby ----------
+  async function refreshLobby(){
+    try {
+      const data = await apiGet('lobby.php', {});
+      renderLobby(data.games || []);
+    } catch(e){ /* leave whatever was last shown — try again next tick */ }
+  }
+
+  function renderLobby(games){
+    const el = document.getElementById('lobbyList');
+    if(!el) return;
+    el.innerHTML = '';
+    if(!games.length){
+      el.innerHTML = '<div class="hint">No open games right now \u2014 start one!</div>';
+      return;
+    }
+    games.forEach(g=>{
+      const row = document.createElement('div');
+      row.className = 'lobby-row';
+
+      const label = document.createElement('span');
+      label.className = 'lobby-label';
+      label.textContent = g.status === 'waiting'
+        ? (g.red_name + ' \u2014 waiting for an opponent')
+        : (g.red_name + ' vs ' + g.blue_name);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn-secondary lobby-btn';
+      if(g.status === 'waiting'){
+        btn.textContent = 'Join';
+        btn.addEventListener('click', ()=>joinOnlineGame(g.room_code));
+      } else {
+        btn.textContent = 'Watch';
+        btn.addEventListener('click', ()=>watchGame(g));
+      }
+
+      row.appendChild(label);
+      row.appendChild(btn);
+      el.appendChild(row);
+    });
+  }
+
+  function startLobbyPolling(){
+    stopLobbyPolling();
+    refreshLobby();
+    lobbyPollTimer = setInterval(refreshLobby, 3000);
+  }
+  function stopLobbyPolling(){
+    if(lobbyPollTimer){ clearInterval(lobbyPollTimer); lobbyPollTimer = null; }
   }
 
   document.getElementById('onlineCreateBtn').addEventListener('click', createOnlineGame);

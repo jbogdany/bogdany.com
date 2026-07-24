@@ -3,6 +3,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/common.php';
 
 handle_request(function (PDO $pdo) {
+  $body = read_json_body();
+  $name = sz_clean_name((string)($body['name'] ?? ''));
+
   $roomCode = gen_room_code($pdo);
   $redToken = gen_token();
   $startingTurn = random_int(0, 1) === 0 ? 'red' : 'blue'; // the "hidden piece" draw, done server-side
@@ -10,9 +13,9 @@ handle_request(function (PDO $pdo) {
   $pdo->beginTransaction();
 
   $stmt = $pdo->prepare(
-    'INSERT INTO games (room_code, status, red_token, created_at) VALUES (?, "waiting", ?, NOW())'
+    'INSERT INTO games (room_code, status, red_token, red_name, created_at) VALUES (?, "waiting", ?, ?, NOW())'
   );
-  $stmt->execute([$roomCode, $redToken]);
+  $stmt->execute([$roomCode, $redToken, $name]);
   $gameId = (int)$pdo->lastInsertId();
 
   $stmt = $pdo->prepare(

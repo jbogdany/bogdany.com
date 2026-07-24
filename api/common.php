@@ -40,6 +40,21 @@ function gen_token(): string {
   return bin2hex(random_bytes(16)); // 32 hex chars
 }
 
+// Trims and caps a client-supplied display name for the lobby (the real
+// account username if logged in, otherwise the guest name assigned by
+// the terminal — resolved client-side, see suzen.html). This is display
+// text only, not an auth credential — a seat's token is what actually
+// proves who's allowed to move (see sz_authenticate()), so there's
+// nothing to gain by sending a fake name beyond a misleading label in
+// the lobby list, the same tier of trust every other game on this site
+// already gives an anonymous guest.
+function sz_clean_name(string $name): string {
+  $name = trim($name);
+  $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?? '';
+  $name = mb_substr($name, 0, 40, 'UTF-8');
+  return $name !== '' ? $name : 'guest';
+}
+
 // Confirms the token belongs to this game and returns which color
 // ('red' | 'blue') it authenticates as, plus the game row itself.
 function sz_authenticate(PDO $pdo, int $gameId, string $token): array {

@@ -17,6 +17,8 @@ handle_request(function (PDO $pdo) {
     'status'       => $game['status'],
     'winner'       => $game['winner'],
     'your_color'   => $auth['color'],
+    'red_name'     => $game['red_name'],
+    'blue_name'    => $game['blue_name'],
     'current_turn' => $stateRow['current_turn'],
     'move_number'  => (int)$stateRow['move_number'],
     'board'        => json_decode($stateRow['board_json'], true),
