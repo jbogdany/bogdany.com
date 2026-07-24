@@ -13,6 +13,16 @@ handle_request(function (PDO $pdo) {
   if (!valid_username($username)) {
     json_error('username must be 3-40 characters: letters, numbers, "_" or "-"', 422);
   }
+
+  // Checked first, before anything else touches the database or even
+  // looks at the password/email — a taken name should fail before the
+  // person has bothered typing either of those.
+  $stmt = $pdo->prepare('SELECT 1 FROM users WHERE username = ?');
+  $stmt->execute([$username]);
+  if ($stmt->fetchColumn() !== false) {
+    json_error('that username is already taken', 409);
+  }
+
   if (!valid_password($password)) {
     json_error('password must be 8-72 characters', 422);
   }
@@ -43,7 +53,7 @@ handle_request(function (PDO $pdo) {
     $pdo->commit();
   } catch (PDOException $e) {
     $pdo->rollBack();
-    if ((int)($e->errorInfo[1] ?? 0) === 1062) { // duplicate key
+    if ((int)($e->errorInfo[1] ?? 0) === 1062) { // duplicate key — race with another signup, or email already used
       json_error('that username or email is already taken', 409);
     }
     throw $e;

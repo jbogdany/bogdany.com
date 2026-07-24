@@ -69,7 +69,8 @@
   }
   .prompt-label { flex: none; }
 
-  #cmd {
+  #cmd,
+  .term-input {
     flex: 0 1 auto;
     width: 0ch;
     background: transparent;
@@ -385,7 +386,7 @@
 
 <div class="chatpanel" id="chatPanel" hidden>
   <div class="chatbar">
-    <span>chat <span class="dim" id="chatStatus"></span></span>
+    <span>chat <span class="dim" id="chatRoomLabel">#general</span> <span class="dim" id="chatStatus"></span></span>
     <span class="bar-actions">
       <button id="chatSoundToggle" title="toggle notification sound">[&#128266;]</button>
       <button id="chatClose">[close]</button>
@@ -580,6 +581,26 @@
       });
   }
 
+  // Same shape as authPost/authGet above, but against chat-api/ — used by
+  // the `chat rooms` / `chat join` / `chat clear` commands, which call
+  // chat-api's rooms.php, join-room.php, and clear-room.php.
+  function chatApiPost(path, body) {
+    return fetch(CHAT_API + path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+    });
+  }
+  function chatApiGet(path) {
+    return fetch(CHAT_API + path, { credentials: "same-origin", headers: { "Accept": "application/json" } })
+      .then(function (r) {
+        return r.json().then(function (data) { return { ok: r.ok, status: r.status, data: data }; });
+      });
+  }
+
   function genHex(len) {
     var s = "";
     while (s.length < len) s += Math.floor(Math.random() * 16).toString(16);
@@ -598,7 +619,9 @@
     chatSoundEnabled = true;
     chatLastId = 0;
     chatInitialLoadDone = false;
+    chatRoom = "general";
     if (chatLogEl) chatLogEl.innerHTML = "";
+    if (chatRoomLabelEl) chatRoomLabelEl.textContent = "#general";
     updateChatSoundButton();
   }
 
@@ -630,16 +653,120 @@
 
   function chatCmd(args) {
     var sub = ((args || [])[0] || "").toLowerCase();
+
     if (sub === "sound") {
       var val = ((args || [])[1] || "").toLowerCase();
       if (val === "off") { setChatSound(false); return [["chat notification sound: off", "dim"]]; }
       if (val === "on") { setChatSound(true); return [["chat notification sound: on", "dim"]]; }
       return [["usage: chat sound on|off", "dim"]];
     }
+
+    if (sub === "rooms") {
+      if (!chatAvailable()) return [["chat requires a verified account.", "dim"]];
+      return chatApiGet("rooms.php").then(function (res) {
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't list rooms", "dim"]];
+        var rooms = (res.data && res.data.rooms) || [];
+        if (!rooms.length) return [["no rooms yet.", "dim"]];
+        return rooms.map(function (r) {
+          var marker = r.name === chatRoom ? "* " : "  ";
+          var tag = r.private ? (r.mine ? " (private, yours)" : " (private)") : "";
+          return [marker + r.name + tag, r.name === chatRoom ? "" : "faint"];
+        });
+      });
+    }
+
+    if (sub === "join") {
+      if (!chatAvailable()) return [["chat requires a verified account.", "dim"]];
+      var room = ((args || [])[1] || "").toLowerCase();
+      if (!room) return [["usage: chat join <room>", "dim"]];
+      return chatApiPost("join-room.php", { room: room }).then(function (res) {
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't join that room", "dim"]];
+        chatSwitchRoom(res.data.room);
+        return [["joined #" + res.data.room, "dim"]];
+      });
+    }
+
+    if (sub === "create") {
+      if (!chatAvailable()) return [["chat requires a verified account.", "dim"]];
+      var newRoom = ((args || [])[1] || "").toLowerCase();
+      if (!newRoom) return [["usage: chat create <room>", "dim"]];
+      return chatApiPost("create-room.php", { room: newRoom }).then(function (res) {
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't create that room", "dim"]];
+        chatSwitchRoom(res.data.room);
+        return [
+          ["created private room #" + res.data.room + " \u2014 you're its admin.", "dim"],
+          ["invite people with `chat invite " + res.data.room + " <username>`.", "faint"]
+        ];
+      });
+    }
+
+    if (sub === "invite") {
+      if (!chatAvailable()) return [["chat requires a verified account.", "dim"]];
+      var inviteRoom = ((args || [])[1] || "").toLowerCase();
+      var inviteUser = (args || [])[2] || "";
+      if (!inviteRoom || !inviteUser) return [["usage: chat invite <room> <username>", "dim"]];
+      return chatApiPost("invite-room.php", { room: inviteRoom, username: inviteUser }).then(function (res) {
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't invite them", "dim"]];
+        return [["invited " + res.data.invited + " to #" + res.data.room, "dim"]];
+      });
+    }
+
+    if (sub === "delete") {
+      if (!currentUser) return [["log in first.", "dim"]];
+      var delRoom = ((args || [])[1] || "").toLowerCase();
+      if (!delRoom) return [["usage: chat delete <room>", "dim"]];
+      return (async function () {
+        var sure = await askYesNo(
+          "permanently delete #" + delRoom + " and all its messages? [y/N] ",
+          false
+        );
+        if (!sure) return [["cancelled.", "dim"]];
+        var res = await chatApiPost("delete-room.php", { room: delRoom });
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't delete that room", "dim"]];
+        if (delRoom === chatRoom) chatSwitchRoom("general");
+        return [["deleted #" + res.data.room, "dim"]];
+      })();
+    }
+
+    if (sub === "clear") {
+      if (!currentUser) return [["log in first.", "dim"]];
+      var target = ((args || [])[1] || "").toLowerCase();
+      if (!target) return [["usage: chat clear <room>", "dim"]];
+      return chatApiPost("clear-room.php", { room: target }).then(function (res) {
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't clear that room", "dim"]];
+        if (target === chatRoom) { chatLastId = 0; chatInitialLoadDone = false; if (chatLogEl) chatLogEl.innerHTML = ""; }
+        return [["cleared #" + res.data.room + " \u2014 " + res.data.deleted + " message(s) deleted", "dim"]];
+      });
+    }
+
+    if (sub === "ban") {
+      if (!currentUser) return [["log in first.", "dim"]];
+      var banRoom = ((args || [])[1] || "").toLowerCase();
+      var banUser = (args || [])[2] || "";
+      if (!banRoom || !banUser) return [["usage: chat ban <room> <username>", "dim"]];
+      return (async function () {
+        var sure = await askYesNo(
+          "permanently ban \"" + banUser + "\" from #" + banRoom + "? this can't be undone. [y/N] ",
+          false
+        );
+        if (!sure) return [["cancelled.", "dim"]];
+        var res = await chatApiPost("ban-user.php", { room: banRoom, username: banUser });
+        if (!res.ok) return [[(res.data && res.data.error) || "couldn't ban them", "dim"]];
+        return [["banned " + res.data.banned + " from #" + res.data.room + " \u2014 permanently.", "dim"]];
+      })();
+    }
+
     return [
-      ["chat notification sound: " + (chatSoundEnabled ? "on" : "off"), "dim"],
-      ["  chat sound on|off      turn the new-message chime on/off", "faint"],
-      ["  Ctrl+/ or [chat]       toggle the chat panel (requires a verified account)", "faint"]
+      ["chat notification sound: " + (chatSoundEnabled ? "on" : "off") + " \u2014 room: #" + chatRoom, "dim"],
+      ["  chat sound on|off         turn the new-message chime on/off", "faint"],
+      ["  chat rooms                list rooms you can see", "faint"],
+      ["  chat join <room>          switch rooms (creates a new PUBLIC room if the name's new)", "faint"],
+      ["  chat create <room>        create a new PRIVATE room \u2014 you become its admin", "faint"],
+      ["  chat invite <room> <user> add someone to a private room you belong to", "faint"],
+      ["  chat delete <room>        delete a private room you created, messages included", "faint"],
+      ["  chat clear <room>         wipe a room's messages (site admins, or that room's creator)", "faint"],
+      ["  chat ban <room> <user>    permanently ban someone from a room (site admins, or its creator)", "faint"],
+      ["  Ctrl+/ or [chat]          toggle the chat panel (requires a verified account)", "faint"]
     ];
   }
 
@@ -678,18 +805,32 @@
   var chatInitialLoadDone = false;
   var chatPollTimer = null;
   var chatOpen = false;
+  var chatRoom = "general";
 
   var chatPanel = document.getElementById("chatPanel");
   var chatLogEl = document.getElementById("chatLog");
   var chatForm = document.getElementById("chatForm");
   var chatInputEl = document.getElementById("chatInput");
   var chatStatusEl = document.getElementById("chatStatus");
+  var chatRoomLabelEl = document.getElementById("chatRoomLabel");
   var btnChat = document.getElementById("btn-chat");
   var chatCloseBtn = document.getElementById("chatClose");
   var chatSoundToggleBtn = document.getElementById("chatSoundToggle");
   var gamebarChat = document.getElementById("gamebarChat");
 
   updateChatSoundButton();
+
+  // Switches the panel to a different room: resets local pagination state
+  // (a room's message ids aren't relative to any other room) and clears
+  // the visible log so old and new room messages never mix on screen.
+  function chatSwitchRoom(room) {
+    chatRoom = room;
+    chatLastId = 0;
+    chatInitialLoadDone = false;
+    if (chatLogEl) chatLogEl.innerHTML = "";
+    if (chatRoomLabelEl) chatRoomLabelEl.textContent = "#" + room;
+    if (chatAvailable()) chatFetchHistory();
+  }
 
   function chatFmtTime(mysqlDatetime) {
     if (!mysqlDatetime) return "";
@@ -746,7 +887,8 @@
   function chatSetStatus(text) { chatStatusEl.textContent = text ? "\u2014 " + text : ""; }
 
   function chatFetchHistory() {
-    var url = CHAT_API + "history.php?limit=30" + (chatLastId ? "&after_id=" + chatLastId : "");
+    var url = CHAT_API + "history.php?limit=30&room=" + encodeURIComponent(chatRoom)
+      + (chatLastId ? "&after_id=" + chatLastId : "");
     fetch(url, { credentials: "same-origin", headers: { "Accept": "application/json" } })
       .then(function (r) {
         if (r.status === 401 || r.status === 403) { chatStopPolling(); throw new Error("locked"); }
@@ -784,7 +926,7 @@
       headers: { "Content-Type": "application/json" },
       // no `author` — the server stamps the logged-in account's official
       // username, never a client-supplied name
-      body: JSON.stringify({ body: text, client_id: chatClientId })
+      body: JSON.stringify({ body: text, client_id: chatClientId, room: chatRoom })
     })
       .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
       .then(function (res) {
@@ -1322,6 +1464,14 @@
         ["  blackjack              beat the dealer to 21", ""],
         ["  chat                   show chat notification-sound status (chat itself needs a verified account)", ""],
         ["    chat sound on|off    turn the new-message chime on/off", "faint"],
+        ["    chat rooms           list chat rooms you can see", "faint"],
+        ["    chat join <room>     switch rooms (creates a new public room if it's new)", "faint"],
+        ["    chat create <room>   create a new private room \u2014 you become its admin", "faint"],
+        ["    chat invite <r> <u>  add a user to a private room you belong to", "faint"],
+        ["    chat delete <room>   delete a private room you created", "faint"],
+        ["    chat clear <room>    wipe a room's messages (site admins, or its creator)", "faint"],
+        ["    chat ban <r> <user>  permanently ban someone from a room (site admins, or its creator)", "faint"],
+        ["  checkers               two humans, or you versus the machine", ""],
         ["  chess                  versus the machine", ""],
         ["  clear                  wipe the screen", ""],
         ["  clear-history          same as `history clear`", ""],
@@ -1429,6 +1579,10 @@
     solitaire: function () {
       launchGame("solitaire", "solitaire.html");
       return [["dealing...", "dim"]];
+    },
+    checkers: function () {
+      launchGame("checkers", "checkers.html");
+      return [["setting up the board...", "dim"]];
     },
     chess: function () {
       launchGame("chess", "chess.html");
@@ -1553,6 +1707,7 @@
       return authPost("logout.php", {}).then(function () {
         currentUser = null;
         username = "guest" + genHex(3);
+        saveGuestName(username);
         chatUpdateAvailability();
         return [["logged out. continuing as " + username + ".", "dim"]];
       });
@@ -1601,6 +1756,7 @@
         if (!res.ok) return [[(res.data && res.data.error) || "couldn't delete account", "dim"]];
         currentUser = null;
         username = "guest" + genHex(3);
+        saveGuestName(username);
         chatUpdateAvailability();
         return [["account deleted. continuing as " + username + ".", "dim"]];
       })();
@@ -1728,7 +1884,7 @@
     return new Promise(function (resolve) {
       const line = el("div", "prompt-line");
       const label = el("span", "prompt-label", labelText);
-      const input = el("input");
+      const input = el("input", "term-input");
       input.setAttribute("autocomplete", opts.masked ? "new-password" : "off");
       input.setAttribute("autocapitalize", "off");
       input.setAttribute("spellcheck", "false");
@@ -1934,14 +2090,37 @@
   });
 
   // ---------- boot sequence / login ----------
+  var GUEST_NAME_KEY = "bogdany-guest-name";
+
+  function saveGuestName(name) {
+    if (hasConsent()) setCookie(GUEST_NAME_KEY, name, 365);
+  }
 
   // Walks someone who typed a brand-new name through turning it into a
   // real account: username (default = the name they typed), password
   // (twice), email. Used both at boot (after declining to stay a guest)
   // and by the standalone `register` command.
   async function registerFlow(suggestedName) {
-    var uname = await askLine("username [" + suggestedName + "]: ");
-    uname = (uname || "").trim().slice(0, 40) || suggestedName;
+    var uname;
+    while (true) {
+      uname = await askLine("username [" + suggestedName + "]: ");
+      uname = (uname || "").trim().slice(0, 40) || suggestedName;
+
+      var check;
+      try {
+        check = await authGet("check-username.php?username=" + encodeURIComponent(uname));
+      } catch (e) {
+        break; // couldn't reach the server to check — fall through, register.php still guards this
+      }
+      if (!check.ok || !check.data) break; // same — don't block signup over a broken check
+      if (check.data.available) break;
+      if (check.data.reason === "invalid") {
+        printLine("usernames are 3-40 characters: letters, numbers, \"_\" or \"-\".", "dim");
+      } else {
+        printLine("\"" + uname + "\" is already taken \u2014 try another.", "dim");
+      }
+      suggestedName = "guest" + genHex(3);
+    }
 
     var pw1 = await askLine("password: ", { masked: true });
     var pw2 = await askLine("confirm password: ", { masked: true });
@@ -1972,7 +2151,7 @@
   }
 
   async function bootLogin() {
-    // resume an existing account session if the weekly cookie is still valid
+    // 1. resume an existing account session if the weekly cookie is still valid
     try {
       var me = await authGet("me.php");
       if (me.ok && me.data && me.data.user) {
@@ -1981,16 +2160,27 @@
         printLine("Welcome back, " + currentUser.username + ".", "faint");
         return currentUser.username;
       }
-    } catch (e) { /* auth-api unreachable — fall through to a fresh prompt */ }
+    } catch (e) { /* auth-api unreachable — fall through */ }
 
-    // no session — real interactive login, not a fake typed line
+    // 2. no account session, but a returning guest's name is remembered —
+    // fill it in and continue, same as the old always-guest boot did,
+    // instead of asking again every single visit
+    var savedGuest = getCookie(GUEST_NAME_KEY);
+    if (savedGuest) {
+      await typeLine("bogdany.com login: " + savedGuest, "dim", 28);
+      return savedGuest;
+    }
+
+    // 3. genuinely new visitor — real interactive login, not a fake typed line
     var typed = await askLine("bogdany.com login: ");
     typed = (typed || "").trim().slice(0, 40);
 
     if (typed === "") {
       var guestName = "guest" + genHex(3);
       printLine("(blank \u2014 continuing as " + guestName + ")", "faint");
-      return await maybeClaimName(guestName);
+      var kept = await maybeClaimName(guestName);
+      if (kept === guestName) saveGuestName(guestName); // declined to register — remember for next time
+      return kept;
     }
 
     var pw = await askLine("password: ", { masked: true });

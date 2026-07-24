@@ -31,16 +31,23 @@ function make_guid(): string {
     . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20, 12);
 }
 
+// Whether the session cookie should carry the Secure attribute — must be
+// computed the same way everywhere the cookie is set OR cleared, since a
+// mismatched Set-Cookie (even just this one flag differing) can fail to
+// actually overwrite the original cookie in the browser.
+function session_cookie_is_secure(): bool {
+  return !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+}
+
 function issue_session(PDO $pdo, int $userId): string {
   $token = random_token();
   $stmt = $pdo->prepare('INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, NOW(6) + INTERVAL 7 DAY)');
   $stmt->execute([$userId, $token]);
 
-  $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
   setcookie(SESSION_COOKIE_NAME, $token, [
     'expires'  => time() + SESSION_TTL_SECONDS,
     'path'     => '/',
-    'secure'   => $secure,
+    'secure'   => session_cookie_is_secure(),
     'httponly' => true, // never readable from JS — the terminal asks me.php instead
     'samesite' => 'Lax',
   ]);
@@ -51,6 +58,7 @@ function clear_session_cookie(): void {
   setcookie(SESSION_COOKIE_NAME, '', [
     'expires'  => time() - 3600,
     'path'     => '/',
+    'secure'   => session_cookie_is_secure(),
     'httponly' => true,
     'samesite' => 'Lax',
   ]);

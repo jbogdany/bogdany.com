@@ -1,6 +1,32 @@
 <?php
 declare(strict_types=1);
 
+// Converts a FATAL error anywhere in this request (a missing required
+// file, calling an undefined function, a parse error in an included
+// file, etc.) into a proper JSON response instead of a blank/broken 500
+// with no body — that's what a plain try/catch can't do, since fatal
+// errors aren't always catchable Throwables and can happen outside any
+// try block (e.g. a top-level require_once). Flip DEBUG_ERRORS to false
+// once things are working — it's currently on so the real cause shows
+// up in the response instead of only the server's error log.
+define('DEBUG_ERRORS', true);
+ob_start();
+register_shutdown_function(function () {
+  $err = error_get_last();
+  if (!$err || !in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+    return; // normal request — whatever was already echoed just flushes as-is
+  }
+  if (ob_get_level() > 0) ob_end_clean(); // discard any partial output from before the crash
+  if (!headers_sent()) {
+    header('Content-Type: application/json; charset=utf-8');
+    http_response_code(500);
+  }
+  echo json_encode([
+    'error' => 'server error',
+    'debug' => DEBUG_ERRORS ? ($err['message'] . ' in ' . $err['file'] . ' on line ' . $err['line']) : null,
+  ]);
+});
+
 require_once __DIR__ . '/config.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -77,11 +103,65 @@ function client_id_or_fail(array $body): string {
   return $id;
 }
 
+// 2-30 chars, lowercase letters/numbers/hyphens, no leading/trailing
+// hyphen. Rooms are plain strings (see schema.sql) rather than a
+// separate id — this is the one place that shape gets enforced.
+function valid_room_name(string $s): bool {
+  return (bool)preg_match('/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/', $s);
+}
+
+// Null if the room doesn't exist yet.
+function get_room(PDO $pdo, string $room): ?array {
+  $stmt = $pdo->prepare('SELECT id, created_by, is_private FROM rooms WHERE name = ?');
+  $stmt->execute([$room]);
+  $row = $stmt->fetch();
+  return $row ?: null;
+}
+
+function is_room_banned(PDO $pdo, string $room, int $userId): bool {
+  $stmt = $pdo->prepare('SELECT 1 FROM room_bans WHERE room = ? AND user_id = ?');
+  $stmt->execute([$room, $userId]);
+  return $stmt->fetchColumn() !== false;
+}
+
+// True if $userId may read/post in $room. A room that doesn't exist yet
+// is always "ok" — that's how a brand-new PUBLIC room name comes into
+// existence the first time someone joins or posts to it (see
+// join-room.php / send.php). A ban always wins, even in a public room —
+// checked first, ahead of ownership or membership. Otherwise: public
+// rooms are open to everyone, and a private room is ok if the user
+// created it or is a listed member.
+function room_access_ok(PDO $pdo, string $room, int $userId): bool {
+  $r = get_room($pdo, $room);
+  if ($r === null) return true;
+  if (is_room_banned($pdo, $room, $userId)) return false;
+  if (!$r['is_private']) return true;
+  if ($r['created_by'] !== null && (int)$r['created_by'] === $userId) return true;
+  $stmt = $pdo->prepare('SELECT 1 FROM room_members WHERE room = ? AND user_id = ?');
+  $stmt->execute([$room, $userId]);
+  return $stmt->fetchColumn() !== false;
+}
+
+// Every chat-api endpoint needs auth-api's session helpers (current_user()
+// etc.) but lives in a different folder, so it's always a relative
+// require across a folder boundary — exactly the kind of thing that
+// silently breaks if the two folders ever aren't true filesystem
+// siblings (wrong upload path, a symlink, etc.). Checking file_exists()
+// first turns that from a blank fatal error into a specific, readable
+// one that names the exact path it looked for.
+function require_auth_session(): void {
+  $path = __DIR__ . '/../auth-api/session.php';
+  if (!file_exists($path)) {
+    json_error('server misconfigured — expected file not found: ' . $path, 500);
+  }
+  require_once $path;
+}
+
 function handle_request(callable $fn): void {
   try {
     $fn(db());
   } catch (Throwable $e) {
     error_log('[chat api] ' . $e->getMessage());
-    json_error('something went wrong on the server', 500);
+    json_error('something went wrong on the server: ' . $e->getMessage(), 500);
   }
 }
